@@ -1,7 +1,8 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { getUser, clearUser } from "@/lib/auth"
+import { getUserSync, clearUser } from "@/lib/auth"
+import { logout } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -21,11 +22,17 @@ import { Logo } from "./logo"
 
 export function Header() {
   const router = useRouter()
-  const user = getUser()
+  const user = getUserSync()
 
-  const handleLogout = () => {
-    clearUser()
-    router.push("/login")
+  const handleLogout = async () => {
+    try {
+      await logout()
+    } catch (error) {
+      console.error("Error logging out:", error)
+    } finally {
+      clearUser()
+      router.push("/login")
+    }
   }
 
   return (

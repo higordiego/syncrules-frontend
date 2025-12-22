@@ -15,7 +15,7 @@ export default function Home() {
   useEffect(() => {
     if (!mounted) return
 
-    const user = getUser()
+    const user = getUserSync()
 
     if (user) {
       router.push("/dashboard")

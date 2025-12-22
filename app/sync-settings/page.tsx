@@ -8,22 +8,50 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Check, Copy, CheckCircle2, Plug } from "lucide-react"
-import { getMCPKeys } from "@/lib/mcp-keys"
+import { listMCPKeys } from "@/lib/api-mcp-keys"
+import { getMCPSettings } from "@/lib/api-sync"
+import { useToast } from "@/components/ui/use-toast"
 
 export default function SyncSettingsPage() {
+  const { toast } = useToast()
   const [mcpKey, setMCPKey] = useState("")
+  const [serverUrl, setServerUrl] = useState("https://mcp.syncrules.io")
   const [copiedServer, setCopiedServer] = useState(false)
   const [copiedConfig, setCopiedConfig] = useState(false)
   const [copiedKey, setCopiedKey] = useState(false)
+  const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    const keys = getMCPKeys()
-    if (keys.length > 0) {
-      setMCPKey(keys[0].key)
-    }
+    loadData()
   }, [])
 
-  const serverUrl = "https://mcp.syncrules.io"
+  const loadData = async () => {
+    try {
+      setLoading(true)
+      // Load MCP settings
+      const settingsResponse = await getMCPSettings()
+      if (settingsResponse.success && settingsResponse.data) {
+        setServerUrl(settingsResponse.data.serverUrl || "https://mcp.syncrules.io")
+      }
+
+      // Load MCP keys
+      const keysResponse = await listMCPKeys()
+      if (keysResponse.success && keysResponse.data && keysResponse.data.length > 0) {
+        // Note: Keys are encrypted on backend, so we show a placeholder
+        // In production, you might want to decrypt or show masked version
+        setMCPKey(keysResponse.data[0].key || "***ENCRYPTED***")
+      }
+    } catch (error) {
+      console.error("Error loading data:", error)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to load settings. Please try again.",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const mcpConfig = `{
   "mcpServers": {

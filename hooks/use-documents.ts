@@ -2,120 +2,174 @@
 
 import { useState, useEffect, useCallback } from "react"
 import {
-  getDocumentsByParent,
-  addDocument,
-  deleteDocument,
+  listDocuments,
+  createDocument,
   updateDocument,
+  deleteDocument,
   getDocumentPath,
   moveDocument,
-  addDocumentFromFile,
-  type DocumentItem,
-} from "@/lib/documents"
-import { getUsageStats } from "@/lib/activity"
+  uploadFiles,
+  type Document,
+} from "@/lib/api-documents"
+import { getUsageStats } from "@/lib/api-usage"
 
 export function useDocuments(parentId: string | null) {
-  const [documents, setDocuments] = useState<DocumentItem[]>([])
-  const [breadcrumb, setBreadcrumb] = useState<DocumentItem[]>([])
+  const [documents, setDocuments] = useState<Document[]>([])
+  const [breadcrumb, setBreadcrumb] = useState<Document[]>([])
   const [loading, setLoading] = useState(false)
 
-  const loadDocuments = useCallback(() => {
-    setLoading(true)
-    const docs = getDocumentsByParent(parentId)
-    setDocuments(docs)
-    if (parentId) {
-      const path = getDocumentPath(parentId)
-      setBreadcrumb(path)
-    } else {
-      setBreadcrumb([])
+  const loadDocuments = useCallback(async () => {
+    try {
+      setLoading(true)
+      const response = await listDocuments({ parentId, limit: 1000 })
+      if (response.success && response.data) {
+        setDocuments(response.data.data)
+        
+        if (parentId) {
+          const pathResponse = await getDocumentPath(parentId)
+          if (pathResponse.success && pathResponse.data) {
+            setBreadcrumb(pathResponse.data)
+          } else {
+            setBreadcrumb([])
+          }
+        } else {
+          setBreadcrumb([])
+        }
+      }
+    } catch (error) {
+      console.error("Error loading documents:", error)
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }, [parentId])
 
   useEffect(() => {
     loadDocuments()
   }, [loadDocuments])
 
-  const canAddFile = useCallback(() => {
-    const stats = getUsageStats()
-    return stats.filesUsed < stats.filesLimit
+  const canAddFile = useCallback(async () => {
+    try {
+      const statsResponse = await getUsageStats()
+      if (statsResponse.success && statsResponse.data) {
+        return statsResponse.data.filesUsed < statsResponse.data.filesLimit
+      }
+      return false
+    } catch {
+      return false
+    }
   }, [])
 
   const handleAddFolder = useCallback(
-    (name: string) => {
-      addDocument({
-        name,
-        type: "folder",
-        parentId,
-      })
-      loadDocuments()
+    async (name: string) => {
+      try {
+        const response = await createDocument({
+          name,
+          type: "folder",
+          parentId,
+        })
+        if (response.success) {
+          await loadDocuments()
+        }
+      } catch (error) {
+        console.error("Error adding folder:", error)
+      }
     },
     [parentId, loadDocuments]
   )
 
   const handleAddFile = useCallback(
-    (name: string, content: string) => {
-      if (!canAddFile()) {
+    async (name: string, content: string) => {
+      try {
+        if (!(await canAddFile())) {
+          return false
+        }
+        const response = await createDocument({
+          name: name.endsWith(".md") ? name : `${name}.md`,
+          type: "file",
+          content,
+          parentId,
+        })
+        if (response.success) {
+          await loadDocuments()
+          return true
+        }
+        return false
+      } catch (error) {
+        console.error("Error adding file:", error)
         return false
       }
-      addDocument({
-        name: name.endsWith(".md") ? name : `${name}.md`,
-        type: "file",
-        content,
-        parentId,
-      })
-      loadDocuments()
-      return true
     },
     [parentId, canAddFile, loadDocuments]
   )
 
   const handleUpdateDocument = useCallback(
-    (id: string, updates: { name?: string; content?: string }) => {
-      updateDocument(id, updates)
-      loadDocuments()
+    async (id: string, updates: { name?: string; content?: string }) => {
+      try {
+        await updateDocument(id, updates)
+        await loadDocuments()
+      } catch (error) {
+        console.error("Error updating document:", error)
+      }
     },
     [loadDocuments]
   )
 
   const handleDeleteDocument = useCallback(
-    (id: string) => {
-      deleteDocument(id)
-      loadDocuments()
+    async (id: string) => {
+      try {
+        await deleteDocument(id)
+        await loadDocuments()
+      } catch (error) {
+        console.error("Error deleting document:", error)
+      }
     },
     [loadDocuments]
   )
 
   const handleMoveDocument = useCallback(
-    (id: string, newParentId: string | null) => {
-      const success = moveDocument(id, newParentId)
-      if (success) {
-        loadDocuments()
+    async (id: string, newParentId: string | null) => {
+      try {
+        const response = await moveDocument(id, newParentId)
+        if (response.success) {
+          await loadDocuments()
+          return true
+        }
+        return false
+      } catch (error) {
+        console.error("Error moving document:", error)
+        return false
       }
-      return success
     },
     [loadDocuments]
   )
 
   const handleUploadFiles = useCallback(
     async (files: File[]) => {
-      const stats = getUsageStats()
-      const filesCanUpload = stats.filesLimit - stats.filesUsed
-
-      if (filesCanUpload <= 0) {
-        return { success: false, error: "limit_reached" }
-      }
-
-      if (files.length > filesCanUpload) {
-        return { success: false, error: "too_many_files", maxFiles: filesCanUpload }
-      }
-
       try {
-        for (const file of files) {
-          await addDocumentFromFile(file, parentId)
+        const statsResponse = await getUsageStats()
+        if (!statsResponse.success || !statsResponse.data) {
+          return { success: false, error: "failed_to_load_stats" }
         }
-        loadDocuments()
-        return { success: true }
+
+        const stats = statsResponse.data
+        const filesCanUpload = stats.filesLimit - stats.filesUsed
+
+        if (filesCanUpload <= 0) {
+          return { success: false, error: "limit_reached" }
+        }
+
+        if (files.length > filesCanUpload) {
+          return { success: false, error: "too_many_files", maxFiles: filesCanUpload }
+        }
+
+        const response = await uploadFiles(files, parentId)
+        if (response.success) {
+          await loadDocuments()
+          return { success: true }
+        }
+        return { success: false, error: "upload_failed" }
       } catch (error) {
+        console.error("Error uploading files:", error)
         return { success: false, error: "upload_failed" }
       }
     },

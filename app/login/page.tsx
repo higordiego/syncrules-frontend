@@ -1,22 +1,19 @@
 "use client"
 
 import { useState } from "react"
-import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { simulateGoogleLogin } from "@/lib/auth"
+import { getGoogleAuthUrl } from "@/lib/api"
 import { Sparkles, Zap, Lock, Brain } from "lucide-react"
 import { Logo } from "@/components/logo"
 
 export default function LoginPage() {
-  const router = useRouter()
   const [loading, setLoading] = useState(false)
 
   const handleGoogleLogin = () => {
     setLoading(true)
-    setTimeout(() => {
-      simulateGoogleLogin()
-      router.push("/dashboard")
-    }, 1000)
+    // Redireciona para Google OAuth
+    // O Google redirecionará de volta para /auth/callback
+    window.location.href = getGoogleAuthUrl()
   }
 
   return (

@@ -5,7 +5,8 @@ import { Header } from "@/components/header"
 import { Sidebar } from "@/components/sidebar"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
-import { getActivities, getUsageStats, getRequestsHistory } from "@/lib/activity"
+import { listActivities, getActivityStats, getActivityHistory } from "@/lib/api-activity"
+import { getUsageStats } from "@/lib/api-usage"
 import { FileText, Key, FolderOpen, Edit, Trash2, Upload, BarChart3, TrendingUp } from "lucide-react"
 import { useEffect, useState } from "react"
 
@@ -20,12 +21,49 @@ export default function ActivityPage() {
     storageLimit: 50,
   })
   const [requestsHistory, setRequestsHistory] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    setActivities(getActivities())
-    setUsageStats(getUsageStats())
-    setRequestsHistory(getRequestsHistory())
+    loadData()
   }, [])
+
+  const loadData = async () => {
+    try {
+      setLoading(true)
+      
+      // Load activities
+      const activitiesResponse = await listActivities({ limit: 50 })
+      if (activitiesResponse.success && activitiesResponse.data) {
+        setActivities(activitiesResponse.data.data || [])
+      }
+      
+      // Load usage stats
+      const usageResponse = await getUsageStats()
+      if (usageResponse.success && usageResponse.data) {
+        setUsageStats({
+          filesUsed: usageResponse.data.filesUsed,
+          filesLimit: usageResponse.data.filesLimit,
+          requestsUsed: usageResponse.data.requestsUsed,
+          requestsLimit: usageResponse.data.requestsLimit,
+          storageUsed: usageResponse.data.storageUsed / (1024 * 1024), // Convert bytes to MB
+          storageLimit: usageResponse.data.storageLimit / (1024 * 1024), // Convert bytes to MB
+        })
+      }
+      
+      // Load history
+      const historyResponse = await getActivityHistory({ days: 7 })
+      if (historyResponse.success && historyResponse.data) {
+        setRequestsHistory(historyResponse.data.map((a: any) => ({
+          date: new Date(a.createdAt).toISOString().split("T")[0],
+          count: 1, // You may need to aggregate this properly
+        })))
+      }
+    } catch (error) {
+      console.error("Error loading activity data:", error)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const getActivityIcon = (type: string) => {
     switch (type) {

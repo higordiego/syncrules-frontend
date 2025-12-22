@@ -31,7 +31,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Plus, Key, Trash2, Eye, EyeOff, Copy, Check } from "lucide-react"
-import { getMCPKeys, addMCPKey, deleteMCPKey, type MCPKey } from "@/lib/mcp-keys"
+import { listMCPKeys, createMCPKey, deleteMCPKey, type MCPKey } from "@/lib/api-mcp-keys"
 
 export default function MCPKeysPage() {
   const [keys, setKeys] = useState<MCPKey[]>([])
@@ -39,6 +39,7 @@ export default function MCPKeysPage() {
   const [deleteKeyId, setDeleteKeyId] = useState<string | null>(null)
   const [visibleKeys, setVisibleKeys] = useState<Set<string>>(new Set())
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
     name: "",
     key: "",
@@ -49,25 +50,50 @@ export default function MCPKeysPage() {
     loadKeys()
   }, [])
 
-  const loadKeys = () => {
-    const loadedKeys = getMCPKeys()
-    setKeys(loadedKeys)
+  const loadKeys = async () => {
+    try {
+      setLoading(true)
+      const response = await listMCPKeys()
+      if (response.success && response.data) {
+        setKeys(response.data)
+      }
+    } catch (error) {
+      console.error("Error loading MCP keys:", error)
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const handleAddKey = (e: React.FormEvent) => {
+  const handleAddKey = async (e: React.FormEvent) => {
     e.preventDefault()
-    const keyWithPrefix = formData.key.startsWith("SK-") ? formData.key : `SK-${formData.key}`
-    addMCPKey({ ...formData, key: keyWithPrefix })
-    setFormData({ name: "", key: "", description: "" })
-    setIsAddDialogOpen(false)
-    loadKeys()
+    try {
+      setLoading(true)
+      const keyWithPrefix = formData.key.startsWith("SK-") ? formData.key : `SK-${formData.key}`
+      const response = await createMCPKey({ ...formData, key: keyWithPrefix })
+      if (response.success) {
+        setFormData({ name: "", key: "", description: "" })
+        setIsAddDialogOpen(false)
+        await loadKeys()
+      }
+    } catch (error) {
+      console.error("Error adding MCP key:", error)
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const handleDeleteKey = () => {
-    if (deleteKeyId) {
-      deleteMCPKey(deleteKeyId)
+  const handleDeleteKey = async () => {
+    if (!deleteKeyId) return
+    
+    try {
+      setLoading(true)
+      await deleteMCPKey(deleteKeyId)
       setDeleteKeyId(null)
-      loadKeys()
+      await loadKeys()
+    } catch (error) {
+      console.error("Error deleting MCP key:", error)
+    } finally {
+      setLoading(false)
     }
   }
 

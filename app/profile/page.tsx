@@ -1,11 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { ProtectedRoute } from "@/components/protected-route"
 import { Header } from "@/components/header"
 import { Sidebar } from "@/components/sidebar"
-import { getUser, updateUserName, deleteAccount } from "@/lib/auth"
+import { getUserSync, clearUser } from "@/lib/auth"
+import { getMe, logout } from "@/lib/api"
+import { updateUser, deleteUser } from "@/lib/api-user"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -15,22 +17,69 @@ import { Trash2, Save, AlertTriangle } from "lucide-react"
 
 function ProfileContent() {
   const router = useRouter()
-  const user = getUser()
+  const [user, setUser] = useState(getUserSync())
   const [name, setName] = useState(user?.name || "")
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [loading, setLoading] = useState(false)
 
-  const handleSaveName = () => {
-    if (name.trim()) {
-      updateUserName(name.trim())
-      setSaved(true)
-      setTimeout(() => setSaved(false), 3000)
+  useEffect(() => {
+    loadUser()
+  }, [])
+
+  const loadUser = async () => {
+    try {
+      const response = await getMe()
+      if (response.success && response.data) {
+        const userData = {
+          id: response.data.id,
+          email: response.data.email,
+          name: response.data.name,
+          picture: response.data.picture,
+          plan: response.data.plan,
+        }
+        setUser(userData)
+        setName(userData.name)
+      }
+    } catch (error) {
+      console.error("Error loading user:", error)
     }
   }
 
-  const handleDeleteAccount = () => {
-    deleteAccount()
-    router.push("/login")
+  const handleSaveName = async () => {
+    if (!name.trim() || !user) return
+    
+    try {
+      setLoading(true)
+      const response = await updateUser(user.id, { name: name.trim() })
+      if (response.success && response.data) {
+        setUser({
+          ...user,
+          name: response.data.name,
+        })
+        setSaved(true)
+        setTimeout(() => setSaved(false), 3000)
+      }
+    } catch (error) {
+      console.error("Error updating name:", error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDeleteAccount = async () => {
+    if (!user) return
+    
+    try {
+      setLoading(true)
+      await deleteUser(user.id)
+      await logout()
+      clearUser()
+      router.push("/login")
+    } catch (error) {
+      console.error("Error deleting account:", error)
+      setLoading(false)
+    }
   }
 
   if (!user) return null

@@ -1,13 +1,24 @@
 "use client"
 
-export interface MCPKey {
-  id: string
-  name: string
-  key: string
-  description: string
-  createdAt: string
-}
+/**
+ * @deprecated Use lib/api-mcp-keys.ts instead
+ * Mantido apenas para compatibilidade durante migração
+ */
 
+import * as apiMCPKeys from "./api-mcp-keys"
+export type { MCPKey } from "./api-mcp-keys"
+
+// Re-export API functions
+export const {
+  listMCPKeys,
+  getMCPKey,
+  createMCPKey,
+  updateMCPKey,
+  deleteMCPKey,
+  validateMCPKey,
+} = apiMCPKeys
+
+// Legacy localStorage functions (mantidas para compatibilidade)
 export function getMCPKeys(): MCPKey[] {
   if (typeof window === "undefined") return []
   const keysStr = localStorage.getItem("mcpKeys")

@@ -1,8 +1,29 @@
 "use client"
 
-import { addActivity } from "./activity"
+/**
+ * @deprecated Use lib/api-documents.ts instead
+ * Mantido apenas para compatibilidade durante migração
+ */
 
-export interface DocumentItem {
+import * as apiDocuments from "./api-documents"
+export type { Document as DocumentItem } from "./api-documents"
+
+// Re-export API functions
+export const {
+  listDocuments,
+  getDocument,
+  createDocument,
+  updateDocument,
+  deleteDocument,
+  getDocumentPath,
+  moveDocument,
+  searchDocuments,
+  uploadFiles,
+  uploadDirectory,
+} = apiDocuments
+
+// Legacy localStorage functions (mantidas para compatibilidade)
+export interface LegacyDocumentItem {
   id: string
   name: string
   type: "file" | "folder"
@@ -12,7 +33,7 @@ export interface DocumentItem {
   updatedAt: string
 }
 
-export function getDocuments(): DocumentItem[] {
+export function getDocuments(): LegacyDocumentItem[] {
   if (typeof window === "undefined") return []
   const docsStr = localStorage.getItem("documents")
   return docsStr ? JSON.parse(docsStr) : []

@@ -4,14 +4,14 @@ import type React from "react"
 import { Folder, FileText, MoreVertical, Eye, Edit, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { type DocumentItem } from "@/lib/documents"
+import { type Document } from "@/lib/api-documents"
 
 interface DocumentItemProps {
-  document: DocumentItem
+  document: Document
   onOpen: (id: string) => void
-  onEdit: (document: DocumentItem) => void
+  onEdit: (document: Document) => void
   onDelete: (id: string) => void
-  onView?: (document: DocumentItem) => void
+  onView?: (document: Document) => void
   isDragging?: boolean
   isDragOver?: boolean
   onDragStart?: (e: React.DragEvent, id: string) => void

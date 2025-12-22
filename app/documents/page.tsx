@@ -44,27 +44,29 @@ import {
   Save,
 } from "lucide-react"
 import {
-  getDocuments,
-  getDocumentsByParent,
-  addDocument,
+  listDocuments,
+  createDocument,
   deleteDocument,
   updateDocument,
   getDocumentPath,
   moveDocument,
-  addDocumentFromFile,
-  processDirectoryUpload,
-  type DocumentItem,
-} from "@/lib/documents"
+  uploadFiles,
+  uploadDirectory,
+  type Document,
+} from "@/lib/api-documents"
 import { MarkdownViewer } from "@/components/markdown-viewer"
 import { MarkdownEditor } from "@/components/documents/markdown-editor"
-import { getUsageStats } from "@/lib/activity"
+import { getUsageStats } from "@/lib/api-usage"
+import type { DocumentItem } from "@/lib/documents"
 import { TreeView } from "@/components/documents/tree-view"
 import { DocumentsEmptyState } from "@/components/documents/empty-state"
+import { useToast } from "@/components/ui/use-toast"
 
 type ViewMode = "tree" | "grid" | "list"
 
 function DocumentsPageContent() {
-  const [allDocuments, setAllDocuments] = useState<DocumentItem[]>([])
+  const { toast } = useToast()
+  const [allDocuments, setAllDocuments] = useState<Document[]>([])
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
   const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false)
   const [isCreateSubfolderOpen, setIsCreateSubfolderOpen] = useState(false)
@@ -72,8 +74,8 @@ function DocumentsPageContent() {
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [isViewOpen, setIsViewOpen] = useState(false)
   const [deleteItemId, setDeleteItemId] = useState<string | null>(null)
-  const [editingItem, setEditingItem] = useState<DocumentItem | null>(null)
-  const [viewingItem, setViewingItem] = useState<DocumentItem | null>(null)
+  const [editingItem, setEditingItem] = useState<Document | null>(null)
+  const [viewingItem, setViewingItem] = useState<Document | null>(null)
   const [folderName, setFolderName] = useState("")
   const [fileForm, setFileForm] = useState({
     name: "",
@@ -87,15 +89,29 @@ function DocumentsPageContent() {
   const [searchQuery, setSearchQuery] = useState("")
   const [viewMode, setViewMode] = useState<ViewMode>("tree")
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     loadAllDocuments()
   }, [])
 
-  const loadAllDocuments = () => {
-    const docs = getDocuments()
-    setAllDocuments(docs)
+  const loadAllDocuments = async () => {
+    try {
+      setLoading(true)
+      const response = await listDocuments({ limit: 1000 })
+      if (response.success && response.data) {
+        // Garantir que sempre seja um array
+        setAllDocuments(Array.isArray(response.data.data) ? response.data.data : [])
+      } else {
+        setAllDocuments([])
+      }
+    } catch (error) {
+      console.error("Error loading documents:", error)
+      setAllDocuments([])
+    } finally {
+      setLoading(false)
+    }
   }
 
   const toggleFolder = (folderId: string) => {
@@ -120,6 +136,11 @@ function DocumentsPageContent() {
   }
 
   const filteredDocuments = useMemo(() => {
+    // Garantir que allDocuments seja sempre um array
+    if (!Array.isArray(allDocuments)) {
+      return []
+    }
+
     if (!searchQuery) return allDocuments
 
     const query = searchQuery.toLowerCase()
@@ -128,14 +149,14 @@ function DocumentsPageContent() {
 
     // Find all matching documents
     allDocuments.forEach((doc) => {
-      if (doc.name.toLowerCase().includes(query)) {
+      if (doc && doc.name && doc.name.toLowerCase().includes(query)) {
         matchingIds.add(doc.id)
         // Add all ancestors and expand them
         let current = doc.parentId
         while (current) {
           matchingIds.add(current)
           foldersToExpand.add(current)
-          const parent = allDocuments.find((d) => d.id === current)
+          const parent = allDocuments.find((d) => d && d.id === current)
           current = parent?.parentId || null
         }
       }
@@ -150,32 +171,48 @@ function DocumentsPageContent() {
       })
     }
 
-    return allDocuments.filter((d) => matchingIds.has(d.id))
+    return allDocuments.filter((d) => d && matchingIds.has(d.id))
   }, [allDocuments, searchQuery])
 
   const rootDocuments = useMemo(() => {
+    if (!Array.isArray(filteredDocuments)) {
+      return []
+    }
     return filteredDocuments.filter((d) => d.parentId === null)
   }, [filteredDocuments])
 
-  const canAddFile = () => {
-    const stats = getUsageStats()
-    return stats.filesUsed < stats.filesLimit
+  const canAddFile = async () => {
+    try {
+      const statsResponse = await getUsageStats()
+      if (statsResponse.success && statsResponse.data) {
+        return statsResponse.data.filesUsed < statsResponse.data.filesLimit
+      }
+      return false
+    } catch {
+      return false
+    }
   }
 
-  const handleAddFolder = (e: React.FormEvent) => {
+  const handleAddFolder = async (e: React.FormEvent) => {
     e.preventDefault()
-    addDocument({
-      name: folderName,
-      type: "folder",
-      parentId: selectedFolderId,
-    })
-    setFolderName("")
-    setIsCreateFolderOpen(false)
-    setIsCreateSubfolderOpen(false)
-    if (selectedFolderId) {
-      setExpandedFolders((prev) => new Set(prev).add(selectedFolderId))
+    try {
+      const response = await createDocument({
+        name: folderName,
+        type: "folder",
+        parentId: selectedFolderId,
+      })
+      if (response.success) {
+        setFolderName("")
+        setIsCreateFolderOpen(false)
+        setIsCreateSubfolderOpen(false)
+        if (selectedFolderId) {
+          setExpandedFolders((prev) => new Set(prev).add(selectedFolderId))
+        }
+        await loadAllDocuments()
+      }
+    } catch (error) {
+      console.error("Error adding folder:", error)
     }
-    loadAllDocuments()
   }
 
   const handleCreateSubfolder = (parentId: string) => {
@@ -183,45 +220,61 @@ function DocumentsPageContent() {
     setIsCreateSubfolderOpen(true)
   }
 
-  const handleAddFile = (e: React.FormEvent) => {
+  const handleAddFile = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!canAddFile()) {
-      setIsCreateFileOpen(false)
-      setShowLimitWarning(true)
-      return
+    try {
+      if (!(await canAddFile())) {
+        setIsCreateFileOpen(false)
+        setShowLimitWarning(true)
+        return
+      }
+      const response = await createDocument({
+        name: fileForm.name.endsWith(".md") ? fileForm.name : `${fileForm.name}.md`,
+        type: "file",
+        content: fileForm.content,
+        parentId: selectedFolderId,
+      })
+      if (response.success) {
+        setFileForm({ name: "", content: "" })
+        setIsCreateFileOpen(false)
+        if (selectedFolderId) {
+          setExpandedFolders((prev) => new Set(prev).add(selectedFolderId))
+        }
+        await loadAllDocuments()
+      }
+    } catch (error) {
+      console.error("Error adding file:", error)
     }
-    addDocument({
-      name: fileForm.name.endsWith(".md") ? fileForm.name : `${fileForm.name}.md`,
-      type: "file",
-      content: fileForm.content,
-      parentId: selectedFolderId,
-    })
-    setFileForm({ name: "", content: "" })
-    setIsCreateFileOpen(false)
-    if (selectedFolderId) {
-      setExpandedFolders((prev) => new Set(prev).add(selectedFolderId))
-    }
-    loadAllDocuments()
   }
 
-  const handleEditItem = (e: React.FormEvent) => {
+  const handleEditItem = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (editingItem) {
-      updateDocument(editingItem.id, {
+    if (!editingItem) return
+    
+    try {
+      const response = await updateDocument(editingItem.id, {
         name: editingItem.name,
         content: editingItem.content || "",
       })
-      setEditingItem(null)
-      setIsEditOpen(false)
-      loadAllDocuments()
+      if (response.success) {
+        setEditingItem(null)
+        setIsEditOpen(false)
+        await loadAllDocuments()
+      }
+    } catch (error) {
+      console.error("Error updating document:", error)
     }
   }
 
-  const handleDeleteItem = () => {
-    if (deleteItemId) {
-      deleteDocument(deleteItemId)
+  const handleDeleteItem = async () => {
+    if (!deleteItemId) return
+    
+    try {
+      await deleteDocument(deleteItemId)
       setDeleteItemId(null)
-      loadAllDocuments()
+      await loadAllDocuments()
+    } catch (error) {
+      console.error("Error deleting document:", error)
     }
   }
 
@@ -230,12 +283,12 @@ function DocumentsPageContent() {
     setSelectedFolderId(folderId)
   }
 
-  const openViewDialog = (item: DocumentItem) => {
+  const openViewDialog = (item: Document) => {
     setViewingItem(item)
     setIsViewOpen(true)
   }
 
-  const openEditDialog = (item: DocumentItem) => {
+  const openEditDialog = (item: Document) => {
     setEditingItem({ ...item })
     setIsEditOpen(true)
     setSelectedFolderId(item.parentId)
@@ -256,19 +309,23 @@ function DocumentsPageContent() {
     setDragOverItem(null)
   }
 
-  const handleDrop = (e: React.DragEvent, targetId: string | null) => {
+  const handleDrop = async (e: React.DragEvent, targetId: string | null) => {
     e.preventDefault()
     e.stopPropagation()
 
     if (!draggedItem) return
 
     if (draggedItem !== targetId) {
-      const success = moveDocument(draggedItem, targetId)
-      if (success) {
-        if (targetId) {
-          setExpandedFolders((prev) => new Set(prev).add(targetId))
+      try {
+        const response = await moveDocument(draggedItem, targetId)
+        if (response.success) {
+          if (targetId) {
+            setExpandedFolders((prev) => new Set(prev).add(targetId))
+          }
+          await loadAllDocuments()
         }
-        loadAllDocuments()
+      } catch (error) {
+        console.error("Error moving document:", error)
       }
     }
 
@@ -287,71 +344,107 @@ function DocumentsPageContent() {
     const files = e.target.files
     if (!files || files.length === 0) return
 
-    const stats = getUsageStats()
-    const filesCanUpload = stats.filesLimit - stats.filesUsed
+    try {
+      const statsResponse = await getUsageStats()
+      if (!statsResponse.success || !statsResponse.data) {
+        console.error("Failed to load usage stats")
+        return
+      }
+      
+      const stats = statsResponse.data
+      const filesCanUpload = stats.filesLimit - stats.filesUsed
 
-    // Check if it's a directory upload (has webkitRelativePath)
-    const isDirectory = Array.from(files).some((f: any) => f.webkitRelativePath)
+      // Check if it's a directory upload (has webkitRelativePath)
+      const isDirectory = Array.from(files).some((f: any) => f.webkitRelativePath)
 
-    if (isDirectory) {
-      // Process directory upload
+      if (isDirectory) {
+        // Process directory upload
+        setUploading(true)
+        try {
+          const result = await uploadDirectory(files, selectedFolderId)
+          if (result.success) {
+            // Reload documents to get new folders
+            await loadAllDocuments()
+            // Expand folders after reload
+            const response = await listDocuments({ limit: 1000 })
+            if (response.success && response.data) {
+              const newFolders = response.data.data.filter((d: Document) => d.type === "folder")
+              setExpandedFolders((prev) => {
+                const newSet = new Set(prev)
+                newFolders.forEach((f: Document) => newSet.add(f.id))
+                return newSet
+              })
+            }
+          } else {
+            toast({
+              variant: "destructive",
+              title: "Upload Failed",
+              description: result.error?.message || "Failed to upload directory",
+            })
+          }
+        } catch (error) {
+          console.error("Error uploading directory:", error)
+          toast({
+            variant: "destructive",
+            title: "Upload Error",
+            description: "Error uploading directory. Please try again.",
+          })
+        } finally {
+          setUploading(false)
+          if (e.target) {
+            e.target.value = ""
+          }
+        }
+        return
+      }
+
+      // Regular file upload
+      if (filesCanUpload <= 0) {
+        setShowLimitWarning(true)
+        e.target.value = ""
+        return
+      }
+
+      if (files.length > filesCanUpload) {
+        toast({
+          variant: "destructive",
+          title: "Upload Limit Reached",
+          description: `You can only upload ${filesCanUpload} file(s). You've reached the Freemium plan limit.`,
+        })
+        e.target.value = ""
+        return
+      }
+
       setUploading(true)
       try {
-        const result = await processDirectoryUpload(files, selectedFolderId)
+        const result = await uploadFiles(Array.from(files), selectedFolderId)
         if (result.success) {
-          // Expand all folders that were created
-          const allDocs = getDocuments()
-          const newFolders = allDocs.filter((d) => d.type === "folder")
-          setExpandedFolders((prev) => {
-            const newSet = new Set(prev)
-            newFolders.forEach((f) => newSet.add(f.id))
-            return newSet
-          })
-          loadAllDocuments()
+          if (selectedFolderId) {
+            setExpandedFolders((prev) => new Set(prev).add(selectedFolderId))
+          }
+          await loadAllDocuments()
         } else {
-          alert(result.error || "Failed to upload directory")
+          toast({
+            variant: "destructive",
+            title: "Upload Failed",
+            description: result.error?.message || "Failed to upload files",
+          })
         }
       } catch (error) {
-        console.error("Error uploading directory:", error)
-        alert("Error uploading directory")
+        console.error("Error uploading files:", error)
+        toast({
+          variant: "destructive",
+          title: "Upload Error",
+          description: "Error uploading files. Please try again.",
+        })
       } finally {
         setUploading(false)
         if (e.target) {
           e.target.value = ""
         }
       }
-      return
-    }
-
-    // Regular file upload
-    if (filesCanUpload <= 0) {
-      setShowLimitWarning(true)
-      e.target.value = ""
-      return
-    }
-
-    if (files.length > filesCanUpload) {
-      alert(`You can only upload ${filesCanUpload} file(s). You've reached the Freemium plan limit.`)
-      e.target.value = ""
-      return
-    }
-
-    setUploading(true)
-    try {
-      for (let i = 0; i < files.length; i++) {
-        await addDocumentFromFile(files[i], selectedFolderId)
-      }
-      if (selectedFolderId) {
-        setExpandedFolders((prev) => new Set(prev).add(selectedFolderId))
-      }
-      loadAllDocuments()
     } catch (error) {
-      console.error("Error uploading files:", error)
-    } finally {
-      setUploading(false)
-      if (e.target) {
-        e.target.value = ""
-      }
+      console.error("Error in handleFileSelect:", error)
     }
   }
 
@@ -363,64 +456,101 @@ function DocumentsPageContent() {
     const files = Array.from(e.dataTransfer.files)
     if (files.length === 0) return
 
-    // Check if it's a directory upload
-    const isDirectory = files.some((f: any) => f.webkitRelativePath)
+    try {
+      const statsResponse = await getUsageStats()
+      if (!statsResponse.success || !statsResponse.data) {
+        console.error("Failed to load usage stats")
+        return
+      }
+      
+      const stats = statsResponse.data
+      
+      // Check if it's a directory upload
+      const isDirectory = files.some((f: any) => f.webkitRelativePath)
 
-    if (isDirectory) {
+      if (isDirectory) {
+        setUploading(true)
+        try {
+          // Create a DataTransfer object to convert File[] to FileList
+          const dataTransfer = new DataTransfer()
+          files.forEach((file) => dataTransfer.items.add(file))
+          const result = await uploadDirectory(dataTransfer.files, selectedFolderId)
+          if (result.success) {
+            await loadAllDocuments()
+            // Expand folders after reload
+            const response = await listDocuments({ limit: 1000 })
+            if (response.success && response.data) {
+              const newFolders = response.data.data.filter((d: Document) => d.type === "folder")
+              setExpandedFolders((prev) => {
+                const newSet = new Set(prev)
+                newFolders.forEach((f: Document) => newSet.add(f.id))
+                return newSet
+              })
+            }
+          } else {
+            toast({
+              variant: "destructive",
+              title: "Upload Failed",
+              description: result.error?.message || "Failed to upload directory",
+            })
+          }
+        } catch (error) {
+          console.error("Error uploading directory:", error)
+          toast({
+            variant: "destructive",
+            title: "Upload Error",
+            description: "Error uploading directory. Please try again.",
+          })
+        } finally {
+          setUploading(false)
+        }
+        return
+      }
+
+      // Regular file upload
+      const filesCanUpload = stats.filesLimit - stats.filesUsed
+
+      if (filesCanUpload <= 0) {
+        setShowLimitWarning(true)
+        return
+      }
+
+      if (files.length > filesCanUpload) {
+        toast({
+          variant: "destructive",
+          title: "Upload Limit Reached",
+          description: `You can only upload ${filesCanUpload} file(s). You've reached the Freemium plan limit.`,
+        })
+        return
+      }
+
       setUploading(true)
       try {
-        // Create a DataTransfer object to convert File[] to FileList
-        const dataTransfer = new DataTransfer()
-        files.forEach((file) => dataTransfer.items.add(file))
-        const result = await processDirectoryUpload(dataTransfer.files, selectedFolderId)
+        const result = await uploadFiles(files, selectedFolderId)
         if (result.success) {
-          const allDocs = getDocuments()
-          const newFolders = allDocs.filter((d) => d.type === "folder")
-          setExpandedFolders((prev) => {
-            const newSet = new Set(prev)
-            newFolders.forEach((f) => newSet.add(f.id))
-            return newSet
-          })
-          loadAllDocuments()
+          if (selectedFolderId) {
+            setExpandedFolders((prev) => new Set(prev).add(selectedFolderId))
+          }
+          await loadAllDocuments()
         } else {
-          alert(result.error || "Failed to upload directory")
+          toast({
+            variant: "destructive",
+            title: "Upload Failed",
+            description: result.error?.message || "Failed to upload files",
+          })
         }
       } catch (error) {
-        console.error("Error uploading directory:", error)
-        alert("Error uploading directory")
+        console.error("Error uploading files:", error)
+        toast({
+          variant: "destructive",
+          title: "Upload Error",
+          description: "Error uploading files. Please try again.",
+        })
       } finally {
         setUploading(false)
       }
-      return
-    }
-
-    // Regular file upload
-    const stats = getUsageStats()
-    const filesCanUpload = stats.filesLimit - stats.filesUsed
-
-    if (filesCanUpload <= 0) {
-      setShowLimitWarning(true)
-      return
-    }
-
-    if (files.length > filesCanUpload) {
-      alert(`You can only upload ${filesCanUpload} file(s). You've reached the Freemium plan limit.`)
-      return
-    }
-
-    setUploading(true)
-    try {
-      for (const file of files) {
-        await addDocumentFromFile(file, selectedFolderId)
-      }
-      if (selectedFolderId) {
-        setExpandedFolders((prev) => new Set(prev).add(selectedFolderId))
-      }
-      loadAllDocuments()
     } catch (error) {
-      console.error("Error uploading files:", error)
-    } finally {
-      setUploading(false)
+      console.error("Error in handleDropZone:", error)
     }
   }
 
@@ -653,7 +783,7 @@ function DocumentsPageContent() {
                 }`}
               >
                 <CardContent className="p-6 lg:p-8">
-                  {allDocuments.length === 0 ? (
+                  {!Array.isArray(allDocuments) || allDocuments.length === 0 ? (
                     <DocumentsEmptyState />
                   ) : viewMode === "tree" ? (
                     <div className="min-h-[400px]">

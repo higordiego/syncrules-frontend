@@ -1,19 +1,21 @@
-export interface IDEConnection {
-  id: string
-  name: string
-  icon: string
-  connected: boolean
-  lastSync?: string
-  apiKey?: string
-  webhookUrl?: string
-  autoSync: boolean
-}
+/**
+ * @deprecated Use lib/api-sync.ts instead
+ * Mantido apenas para compatibilidade durante migração
+ */
 
-export interface MCPSettings {
-  configured: boolean
-  lastSync?: string
-  serverUrl: string
-}
+import * as apiSync from "./api-sync"
+export type { IDEConnection, MCPSettings } from "./api-sync"
+
+// Re-export API functions
+export const {
+  getMCPSettings,
+  updateMCPSettings,
+  listIDEConnections,
+  createIDEConnection,
+  updateIDEConnection,
+  deleteIDEConnection,
+  triggerSync,
+} = apiSync
 
 const DEFAULT_IDES: IDEConnection[] = [
   {

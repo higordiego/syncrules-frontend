@@ -5,19 +5,19 @@ import { useState, useMemo } from "react"
 import { ChevronRight, ChevronDown, Folder, FolderOpen, FileText, MoreVertical } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { type DocumentItem } from "@/lib/documents"
+import { type Document } from "@/lib/api-documents"
 import { cn } from "@/lib/utils"
 import { Eye, Edit, Trash2, FolderPlus } from "lucide-react"
 
 interface TreeViewProps {
-  documents: DocumentItem[]
-  allDocuments: DocumentItem[]
+  documents: Document[]
+  allDocuments: Document[]
   expandedFolders: Set<string>
   onToggleFolder: (folderId: string) => void
   onOpenFolder: (folderId: string) => void
-  onEdit: (item: DocumentItem) => void
+  onEdit: (item: Document) => void
   onDelete: (itemId: string) => void
-  onView?: (item: DocumentItem) => void
+  onView?: (item: Document) => void
   onCreateSubfolder?: (parentId: string) => void
   draggedItem: string | null
   dragOverItem: string | null
@@ -49,14 +49,14 @@ function TreeItem({
   onDragEnd,
   level = 0,
 }: {
-  item: DocumentItem
-  allDocuments: DocumentItem[]
+  item: Document
+  allDocuments: Document[]
   expandedFolders: Set<string>
   onToggleFolder: (folderId: string) => void
   onOpenFolder: (folderId: string) => void
-  onEdit: (item: DocumentItem) => void
+  onEdit: (item: Document) => void
   onDelete: (itemId: string) => void
-  onView?: (item: DocumentItem) => void
+  onView?: (item: Document) => void
   onCreateSubfolder?: (parentId: string) => void
   draggedItem: string | null
   dragOverItem: string | null

@@ -1,6 +1,22 @@
 "use client"
 
-export interface Activity {
+/**
+ * @deprecated Use lib/api-activity.ts instead
+ * Mantido apenas para compatibilidade durante migração
+ */
+
+import * as apiActivity from "./api-activity"
+export type { Activity } from "./api-activity"
+
+// Re-export API functions
+export const {
+  listActivities,
+  getActivityStats,
+  getActivityHistory,
+} = apiActivity
+
+// Legacy localStorage functions (mantidas para compatibilidade)
+export interface LegacyActivity {
   id: string
   type: "upload" | "folder" | "key" | "edit" | "delete"
   description: string
@@ -16,15 +32,15 @@ export interface UsageStats {
   storageLimit: number
 }
 
-export function getActivities(): Activity[] {
+export function getActivities(): LegacyActivity[] {
   if (typeof window === "undefined") return []
   const activitiesStr = localStorage.getItem("activities")
   return activitiesStr ? JSON.parse(activitiesStr) : []
 }
 
-export function addActivity(activity: Omit<Activity, "id" | "timestamp">) {
+export function addActivity(activity: Omit<LegacyActivity, "id" | "timestamp">) {
   const activities = getActivities()
-  const newActivity: Activity = {
+  const newActivity: LegacyActivity = {
     ...activity,
     id: Date.now().toString(),
     timestamp: new Date().toISOString(),
