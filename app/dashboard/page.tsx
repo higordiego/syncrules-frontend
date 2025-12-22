@@ -1,0 +1,307 @@
+"use client"
+
+import { ProtectedRoute } from "@/components/protected-route"
+import { Header } from "@/components/header"
+import { Sidebar } from "@/components/sidebar"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { getUser } from "@/lib/auth"
+import { FileText, Key, FolderOpen, Activity } from "lucide-react"
+import { useEffect, useState } from "react"
+
+interface Stats {
+  totalDocuments: number
+  totalFolders: number
+  totalKeys: number
+}
+
+export default function DashboardPage() {
+  const user = getUser()
+  const [stats, setStats] = useState<Stats>({
+    totalDocuments: 0,
+    totalFolders: 0,
+    totalKeys: 0,
+  })
+
+  useEffect(() => {
+    // Load stats from localStorage
+    const documentsStr = localStorage.getItem("documents")
+    const keysStr = localStorage.getItem("mcpKeys")
+
+    const documents = documentsStr ? JSON.parse(documentsStr) : []
+    const keys = keysStr ? JSON.parse(keysStr) : []
+
+    const countFolders = (items: any[]) => {
+      return items.filter((item) => item.type === "folder").length
+    }
+
+    const countDocuments = (items: any[]) => {
+      return items.filter((item) => item.type === "file").length
+    }
+
+    setStats({
+      totalDocuments: countDocuments(documents),
+      totalFolders: countFolders(documents),
+      totalKeys: keys.length,
+    })
+  }, [])
+
+  const currentPlan = {
+    name: "Freemium",
+    filesUsed: stats.totalDocuments,
+    filesLimit: 10,
+    requestsUsed: 45,
+    requestsLimit: 100,
+  }
+
+  const planUsagePercentage = (currentPlan.filesUsed / currentPlan.filesLimit) * 100
+  const requestsUsagePercentage = (currentPlan.requestsUsed / currentPlan.requestsLimit) * 100
+
+  return (
+    <ProtectedRoute>
+      <div className="flex min-h-screen flex-col">
+        <Header />
+        <div className="flex flex-1">
+          <Sidebar />
+          <main className="flex-1 p-4 lg:p-6 bg-background">
+            <div className="mx-auto max-w-7xl space-y-4 lg:space-y-6">
+              <div>
+                <h1 className="text-2xl lg:text-3xl font-bold text-foreground">Dashboard</h1>
+                <p className="mt-2 text-sm lg:text-base text-muted-foreground">Welcome back, {user?.name}!</p>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <Card className="border-border bg-card">
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium text-card-foreground">Total Documents</CardTitle>
+                    <FileText className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-3xl font-bold text-card-foreground">{stats.totalDocuments}</div>
+                    <p className="mt-1 text-xs text-muted-foreground">Markdown files</p>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-border bg-card">
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium text-card-foreground">Total Folders</CardTitle>
+                    <FolderOpen className="h-5 w-5 text-green-600 dark:text-green-400" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-3xl font-bold text-card-foreground">{stats.totalFolders}</div>
+                    <p className="mt-1 text-xs text-muted-foreground">Organized in hierarchy</p>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-border bg-card">
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium text-card-foreground">MCP Keys</CardTitle>
+                    <Key className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-3xl font-bold text-card-foreground">{stats.totalKeys}</div>
+                    <p className="mt-1 text-xs text-muted-foreground">Registered keys</p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div className="grid gap-4 lg:gap-6 lg:grid-cols-2">
+                <Card className="border-border bg-card">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-card-foreground">
+                      <Activity className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                      Recent Activity
+                    </CardTitle>
+                    <CardDescription>Your most recent actions in the system</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div className="flex items-start gap-4 rounded-lg border border-border bg-muted/50 p-3">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-500">
+                          <FileText className="h-4 w-4 text-white" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-card-foreground">Welcome to DocManager</p>
+                          <p className="mt-1 text-xs text-muted-foreground">Start by adding your documents</p>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-border bg-card">
+                  <CardHeader>
+                    <CardTitle className="text-card-foreground">Quick Access</CardTitle>
+                    <CardDescription>Links to main features</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid gap-3">
+                      <a
+                        href="/documents"
+                        className="flex items-center gap-3 rounded-lg border border-border bg-background p-3 transition-colors hover:bg-accent hover:text-accent-foreground"
+                      >
+                        <FolderOpen className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                        <div>
+                          <p className="text-sm font-medium text-foreground">Manage Documents</p>
+                          <p className="text-xs text-muted-foreground">Add and organize your files</p>
+                        </div>
+                      </a>
+                      <a
+                        href="/mcp-keys"
+                        className="flex items-center gap-3 rounded-lg border border-border bg-background p-3 transition-colors hover:bg-accent hover:text-accent-foreground"
+                      >
+                        <Key className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                        <div>
+                          <p className="text-sm font-medium text-foreground">Manage MCP Keys</p>
+                          <p className="text-xs text-muted-foreground">Configure your credentials</p>
+                        </div>
+                      </a>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div className="grid gap-4 lg:gap-6 lg:grid-cols-2">
+                <Card className="border-border bg-card">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-card-foreground">
+                      <Activity className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                      {currentPlan.name} Plan Usage
+                    </CardTitle>
+                    <CardDescription>Track your limits and usage</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium text-card-foreground">Files</span>
+                        <span className="text-sm text-muted-foreground">
+                          {currentPlan.filesUsed} / {currentPlan.filesLimit}
+                        </span>
+                      </div>
+                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className={`h-full transition-all ${
+                            planUsagePercentage >= 80
+                              ? "bg-red-500"
+                              : planUsagePercentage >= 50
+                                ? "bg-amber-500"
+                                : "bg-green-500"
+                          }`}
+                          style={{ width: `${planUsagePercentage}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium text-card-foreground">Requests (Month)</span>
+                        <span className="text-sm text-muted-foreground">
+                          {currentPlan.requestsUsed} / {currentPlan.requestsLimit}
+                        </span>
+                      </div>
+                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className={`h-full transition-all ${
+                            requestsUsagePercentage >= 80
+                              ? "bg-red-500"
+                              : requestsUsagePercentage >= 50
+                                ? "bg-amber-500"
+                                : "bg-green-500"
+                          }`}
+                          style={{ width: `${requestsUsagePercentage}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {planUsagePercentage >= 80 && (
+                      <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-3">
+                        <p className="text-sm text-amber-700 dark:text-amber-400">
+                          You're close to the limit! Consider upgrading.
+                        </p>
+                      </div>
+                    )}
+
+                    <a
+                      href="/plans"
+                      className="block w-full text-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+                    >
+                      View Plans
+                    </a>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-border bg-card">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-card-foreground">
+                      <svg
+                        className="h-5 w-5 text-green-600 dark:text-green-400"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                        />
+                      </svg>
+                      Sync Status
+                    </CardTitle>
+                    <CardDescription>Connections with your AI tools</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex items-center justify-between rounded-lg border border-border bg-muted/50 p-3">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10">
+                          <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-card-foreground">VS Code</p>
+                          <p className="text-xs text-muted-foreground">Connected and synced</p>
+                        </div>
+                      </div>
+                      <span className="text-xs font-medium text-green-600 dark:text-green-400">Active</span>
+                    </div>
+
+                    <div className="flex items-center justify-between rounded-lg border border-border bg-muted/50 p-3">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-500/10">
+                          <div className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-card-foreground">Cursor IDE</p>
+                          <p className="text-xs text-muted-foreground">Syncing rules</p>
+                        </div>
+                      </div>
+                      <span className="text-xs font-medium text-blue-600 dark:text-blue-400">Active</span>
+                    </div>
+
+                    <div className="flex items-center justify-between rounded-lg border border-border bg-muted/50 p-3">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-500/10">
+                          <div className="h-2 w-2 rounded-full bg-gray-500" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-card-foreground">GitHub Copilot</p>
+                          <p className="text-xs text-muted-foreground">Waiting for connection</p>
+                        </div>
+                      </div>
+                      <span className="text-xs font-medium text-muted-foreground">Inactive</span>
+                    </div>
+
+                    <a
+                      href="/sync-settings"
+                      className="w-full text-center rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium text-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+                    >
+                      Configure Integrations
+                    </a>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+    </ProtectedRoute>
+  )
+}
