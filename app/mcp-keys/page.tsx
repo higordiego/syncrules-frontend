@@ -8,18 +8,7 @@ import { Header } from "@/components/header"
 import { Sidebar } from "@/components/sidebar"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
+import { Badge } from "@/components/ui/badge"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -30,21 +19,19 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Plus, Key, Trash2, Eye, EyeOff, Copy, Check } from "lucide-react"
-import { listMCPKeys, createMCPKey, deleteMCPKey, type MCPKey } from "@/lib/api-mcp-keys"
+import { Plus, Key, Trash2, Copy, Check, Edit, Globe, Building2, FolderKanban, Eye, EyeOff } from "lucide-react"
+import { listMCPKeys, deleteMCPKey, type MCPKey } from "@/lib/api-mcp-keys"
+import { MCPKeyScopeDialog } from "@/components/mcp-keys/mcp-key-scope-dialog"
+
 
 export default function MCPKeysPage() {
   const [keys, setKeys] = useState<MCPKey[]>([])
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+  const [editingKey, setEditingKey] = useState<MCPKey | undefined>(undefined)
   const [deleteKeyId, setDeleteKeyId] = useState<string | null>(null)
-  const [visibleKeys, setVisibleKeys] = useState<Set<string>>(new Set())
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
+
   const [loading, setLoading] = useState(false)
-  const [formData, setFormData] = useState({
-    name: "",
-    key: "",
-    description: "",
-  })
 
   useEffect(() => {
     loadKeys()
@@ -55,36 +42,30 @@ export default function MCPKeysPage() {
       setLoading(true)
       const response = await listMCPKeys()
       if (response.success && response.data) {
-        setKeys(response.data)
+        // Garantir que response.data é um array
+        const keysData = Array.isArray(response.data) ? response.data : []
+        setKeys(keysData)
+      } else {
+        // Se não houver dados ou resposta não foi bem-sucedida, usar array vazio
+        setKeys([])
       }
     } catch (error) {
       console.error("Error loading MCP keys:", error)
+      // Em caso de erro, garantir que keys seja um array vazio
+      setKeys([])
     } finally {
       setLoading(false)
     }
   }
 
-  const handleAddKey = async (e: React.FormEvent) => {
-    e.preventDefault()
-    try {
-      setLoading(true)
-      const keyWithPrefix = formData.key.startsWith("SK-") ? formData.key : `SK-${formData.key}`
-      const response = await createMCPKey({ ...formData, key: keyWithPrefix })
-      if (response.success) {
-        setFormData({ name: "", key: "", description: "" })
-        setIsAddDialogOpen(false)
-        await loadKeys()
-      }
-    } catch (error) {
-      console.error("Error adding MCP key:", error)
-    } finally {
-      setLoading(false)
-    }
+  const handleDialogSuccess = () => {
+    loadKeys()
+    setEditingKey(undefined)
   }
 
   const handleDeleteKey = async () => {
     if (!deleteKeyId) return
-    
+
     try {
       setLoading(true)
       await deleteMCPKey(deleteKeyId)
@@ -97,17 +78,6 @@ export default function MCPKeysPage() {
     }
   }
 
-  const toggleKeyVisibility = (id: string) => {
-    setVisibleKeys((prev) => {
-      const newSet = new Set(prev)
-      if (newSet.has(id)) {
-        newSet.delete(id)
-      } else {
-        newSet.add(id)
-      }
-      return newSet
-    })
-  }
 
   const copyToClipboard = (key: string, id: string) => {
     navigator.clipboard.writeText(key)
@@ -115,10 +85,7 @@ export default function MCPKeysPage() {
     setTimeout(() => setCopiedKey(null), 2000)
   }
 
-  const maskKey = (key: string) => {
-    if (key.length <= 8) return "••••••••"
-    return key.substring(0, 4) + "••••••••" + key.substring(key.length - 4)
-  }
+
 
   return (
     <ProtectedRoute>
@@ -133,72 +100,19 @@ export default function MCPKeysPage() {
                   <h1 className="text-2xl lg:text-3xl font-bold text-foreground">MCP Keys</h1>
                   <p className="mt-2 text-sm lg:text-base text-muted-foreground">Manage your MCP API keys</p>
                 </div>
-                <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-                  <DialogTrigger asChild>
-                    <Button className="bg-blue-500 hover:bg-blue-600 w-full sm:w-auto">
-                      <Plus className="mr-2 h-4 w-4" />
-                      Add Key
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="sm:max-w-[525px] mx-4">
-                    <form onSubmit={handleAddKey}>
-                      <DialogHeader>
-                        <DialogTitle>Add New MCP Key</DialogTitle>
-                        <DialogDescription>Enter your MCP API key details</DialogDescription>
-                      </DialogHeader>
-                      <div className="grid gap-4 py-4">
-                        <div className="grid gap-2">
-                          <Label htmlFor="name">Key Name</Label>
-                          <Input
-                            id="name"
-                            placeholder="e.g., Production Key"
-                            value={formData.name}
-                            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                            required
-                          />
-                        </div>
-                        <div className="grid gap-2">
-                          <Label htmlFor="key">API Key</Label>
-                          <div className="flex items-center gap-2">
-                            <span className="px-3 py-2 bg-slate-100 border border-slate-200 rounded-md text-sm font-mono text-slate-600">
-                              SK-
-                            </span>
-                            <Input
-                              id="key"
-                              type="password"
-                              placeholder="your-key-here"
-                              value={formData.key}
-                              onChange={(e) => setFormData({ ...formData, key: e.target.value })}
-                              required
-                              className="flex-1"
-                            />
-                          </div>
-                        </div>
-                        <div className="grid gap-2">
-                          <Label htmlFor="description">Description</Label>
-                          <Textarea
-                            id="description"
-                            placeholder="What is this key for?"
-                            value={formData.description}
-                            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                            rows={3}
-                          />
-                        </div>
-                      </div>
-                      <DialogFooter>
-                        <Button type="button" variant="outline" onClick={() => setIsAddDialogOpen(false)}>
-                          Cancel
-                        </Button>
-                        <Button type="submit" className="bg-blue-500 hover:bg-blue-600">
-                          Add
-                        </Button>
-                      </DialogFooter>
-                    </form>
-                  </DialogContent>
-                </Dialog>
+                <Button
+                  onClick={() => {
+                    setEditingKey(undefined)
+                    setIsAddDialogOpen(true)
+                  }}
+                  className="bg-blue-500 hover:bg-blue-600 w-full sm:w-auto"
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Key
+                </Button>
               </div>
 
-              {keys.length === 0 ? (
+              {!Array.isArray(keys) || keys.length === 0 ? (
                 <Card className="border-border bg-card">
                   <CardContent className="flex flex-col items-center justify-center py-12 lg:py-16">
                     <div className="flex h-20 w-20 items-center justify-center rounded-full bg-muted">
@@ -230,47 +144,100 @@ export default function MCPKeysPage() {
                               <Key className="h-5 w-5 text-amber-600 dark:text-amber-400" />
                             </div>
                             <div className="min-w-0 flex-1">
-                              <CardTitle className="text-base lg:text-lg break-words text-card-foreground">
-                                {keyItem.name}
-                              </CardTitle>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <CardTitle className="text-base lg:text-lg break-words text-card-foreground">
+                                  {keyItem.name}
+                                </CardTitle>
+                                {keyItem.scope && (
+                                  <Badge
+                                    variant={
+                                      keyItem.scope === "all_projects"
+                                        ? "default"
+                                        : keyItem.scope === "account"
+                                          ? "secondary"
+                                          : "outline"
+                                    }
+                                    className="text-xs"
+                                  >
+                                    {keyItem.scope === "all_projects" && (
+                                      <>
+                                        <Globe className="h-3 w-3 mr-1" />
+                                        All Projects
+                                      </>
+                                    )}
+                                    {keyItem.scope === "account" && (
+                                      <>
+                                        <Building2 className="h-3 w-3 mr-1" />
+                                        Organization
+                                      </>
+                                    )}
+                                    {keyItem.scope === "project" && (
+                                      <>
+                                        <FolderKanban className="h-3 w-3 mr-1" />
+                                        {keyItem.projectIds && keyItem.projectIds.length > 1
+                                          ? `${keyItem.projectIds.length} Projects`
+                                          : "1 Project"}
+                                      </>
+                                    )}
+                                  </Badge>
+                                )}
+                              </div>
                               <CardDescription className="mt-1 text-sm break-words">
                                 {keyItem.description}
                               </CardDescription>
+                              {keyItem.scope === "project" && keyItem.projectIds && keyItem.projectIds.length > 0 && (
+                                <div className="mt-2 flex flex-wrap gap-1">
+                                  {keyItem.projectIds.slice(0, 3).map((projectId) => (
+                                    <Badge key={projectId} variant="outline" className="text-xs">
+                                      {projectId}
+                                    </Badge>
+                                  ))}
+                                  {keyItem.projectIds.length > 3 && (
+                                    <Badge variant="outline" className="text-xs">
+                                      +{keyItem.projectIds.length - 3} more
+                                    </Badge>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           </div>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="text-red-600 hover:bg-red-50 hover:text-red-700 self-end sm:self-start"
-                            onClick={() => setDeleteKeyId(keyItem.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          <div className="flex gap-2 self-end sm:self-start">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-blue-600 hover:bg-blue-50 hover:text-blue-700"
+                              onClick={() => {
+                                setEditingKey(keyItem)
+                                setIsAddDialogOpen(true)
+                              }}
+                              title="Edit scope"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-red-600 hover:bg-red-50 hover:text-red-700"
+                              onClick={() => setDeleteKeyId(keyItem.id)}
+                              title="Delete key"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
                       </CardHeader>
                       <CardContent>
                         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                          <div className="flex-1 rounded-lg border border-border bg-muted p-3 font-mono text-xs lg:text-sm break-all text-muted-foreground">
-                            {visibleKeys.has(keyItem.id) ? keyItem.key : maskKey(keyItem.key)}
+                          <div className="flex-1 rounded-lg border border-border bg-muted p-3 font-mono text-xs lg:text-sm break-all text-muted-foreground flex items-center justify-between gap-2">
+                            <span className="flex-1">{keyItem.key}</span>
                           </div>
                           <div className="flex gap-2">
                             <Button
                               variant="outline"
                               size="icon"
-                              onClick={() => toggleKeyVisibility(keyItem.id)}
-                              className="border-border"
-                            >
-                              {visibleKeys.has(keyItem.id) ? (
-                                <EyeOff className="h-4 w-4" />
-                              ) : (
-                                <Eye className="h-4 w-4" />
-                              )}
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="icon"
                               onClick={() => copyToClipboard(keyItem.key, keyItem.id)}
                               className="border-border"
+                              title="Copy API key"
                             >
                               {copiedKey === keyItem.id ? (
                                 <Check className="h-4 w-4 text-green-600" />
@@ -280,6 +247,7 @@ export default function MCPKeysPage() {
                             </Button>
                           </div>
                         </div>
+
                         <p className="mt-2 text-xs text-muted-foreground">
                           Created on {new Date(keyItem.createdAt).toLocaleDateString("en-US")}
                         </p>
@@ -305,6 +273,17 @@ export default function MCPKeysPage() {
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
+
+              {/* MCP Key Scope Dialog */}
+              <MCPKeyScopeDialog
+                isOpen={isAddDialogOpen}
+                onOpenChange={(open) => {
+                  setIsAddDialogOpen(open)
+                  if (!open) setEditingKey(undefined)
+                }}
+                onSuccess={handleDialogSuccess}
+                existingKey={editingKey}
+              />
             </div>
           </main>
         </div>

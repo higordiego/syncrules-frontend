@@ -79,19 +79,19 @@ export default function LoginPage() {
         </div>
       </div>
 
-      <div className="flex-1 flex items-center justify-center p-6 lg:p-12">
+      <div className="flex-1 flex items-center justify-center p-6 lg:p-12 bg-background dark:bg-slate-950">
         <div className="w-full max-w-md space-y-8">
           <div className="lg:hidden text-center mb-8">
             <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 shadow-lg mb-4 p-2">
               <Logo className="h-12 w-12 text-primary" />
             </div>
-            <h1 className="text-3xl font-bold text-foreground">Sync Rules</h1>
+            <h1 className="text-3xl font-bold text-foreground dark:text-slate-100">Sync Rules</h1>
           </div>
 
           <div className="space-y-6">
             <div className="space-y-2 text-center lg:text-left">
-              <h2 className="text-3xl font-bold tracking-tight text-foreground">Welcome back</h2>
-              <p className="text-muted-foreground">Sign in with your Google account to continue</p>
+              <h2 className="text-3xl font-bold tracking-tight text-foreground dark:text-slate-100">Welcome back</h2>
+              <p className="text-muted-foreground dark:text-slate-400">Sign in with your Google account to continue</p>
             </div>
 
             <div className="space-y-4">
@@ -133,21 +133,24 @@ export default function LoginPage() {
 
               <div className="relative">
                 <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t border-border" />
+                  <span className="w-full border-t border-border dark:border-slate-800" />
                 </div>
                 <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-background px-2 text-muted-foreground">Secure and fast access</span>
+                  <span className="bg-background dark:bg-slate-950 px-2 text-muted-foreground dark:text-slate-500">Secure and fast access</span>
                 </div>
               </div>
 
-              <div className="rounded-lg border border-border bg-card/50 p-4">
+              <div className="rounded-lg border border-border/50 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent dark:from-primary/20 dark:via-primary/10 dark:to-transparent p-4 backdrop-blur-sm dark:bg-slate-900/50 dark:border-slate-800">
                 <div className="flex items-start gap-3">
-                  <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                    <Sparkles className="w-5 h-5 text-primary" />
+                  <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 dark:from-primary/30 dark:to-primary/20 flex items-center justify-center ring-1 ring-primary/20 dark:ring-primary/30">
+                    <Sparkles className="w-5 h-5 text-primary dark:text-primary" />
                   </div>
                   <div className="flex-1">
-                    <h4 className="font-medium text-sm text-foreground mb-1">Powered by AI</h4>
-                    <p className="text-xs text-muted-foreground">
+                    <h4 className="font-semibold text-sm text-primary dark:text-primary mb-1.5 flex items-center gap-1.5">
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
+                      Powered by AI
+                    </h4>
+                    <p className="text-xs leading-relaxed text-slate-700 dark:text-slate-300 font-medium">
                       Intelligent document management system with Markdown support and automatic organization
                     </p>
                   </div>
@@ -155,13 +158,13 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <p className="text-center text-xs text-muted-foreground px-8">
+            <p className="text-center text-xs text-slate-600 dark:text-slate-400 px-8">
               By continuing, you agree to our{" "}
-              <a href="#" className="underline hover:text-foreground transition-colors">
+              <a href="#" className="underline hover:text-slate-900 dark:hover:text-slate-200 transition-colors text-slate-700 dark:text-slate-300">
                 Terms of Service
               </a>{" "}
               and{" "}
-              <a href="#" className="underline hover:text-foreground transition-colors">
+              <a href="#" className="underline hover:text-slate-900 dark:hover:text-slate-200 transition-colors text-slate-700 dark:text-slate-300">
                 Privacy Policy
               </a>
             </p>

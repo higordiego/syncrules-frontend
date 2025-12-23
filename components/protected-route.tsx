@@ -6,6 +6,7 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { getUser, getUserSync, type User } from "@/lib/auth"
 import { isAuthenticated } from "@/lib/api"
+import { ProjectRequirementCheck } from "./projects/project-requirement-check"
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const router = useRouter()
@@ -59,5 +60,6 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return null
   }
 
-  return <>{children}</>
+  // Verificar se usuário tem projetos (regra obrigatória)
+  return <ProjectRequirementCheck>{children}</ProjectRequirementCheck>
 }

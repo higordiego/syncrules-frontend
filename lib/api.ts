@@ -6,7 +6,7 @@
  */
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api/v1"
-const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "406431115958-jb0qfpgr09fn7adinuuv1ifj0g93dkop.apps.googleusercontent.com"
+const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "796650892294-fthnd6m999bjv49npemmgl40hqph9kar.apps.googleusercontent.com"
 
 // Storage keys
 const TOKEN_KEY = "syncrules_token"
@@ -87,9 +87,9 @@ export async function request<T>(
   const url = `${API_BASE_URL}${endpoint}`
   const token = getAccessToken()
 
-  const headers: HeadersInit = {
+  const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    ...options.headers,
+    ...(options.headers as Record<string, string>),
   }
 
   // Adiciona token Bearer se disponível
@@ -112,10 +112,13 @@ export async function request<T>(
         // Retenta a requisição com novo token
         const newToken = getAccessToken()
         if (newToken) {
-          headers["Authorization"] = `Bearer ${newToken}`
+          const retryHeaders: Record<string, string> = {
+            ...headers,
+            Authorization: `Bearer ${newToken}`,
+          }
           const retryResponse = await fetch(url, {
             ...options,
-            headers,
+            headers: retryHeaders,
             mode: "cors",
             credentials: "include",
           })
@@ -248,9 +251,17 @@ export function getGoogleAuthUrl(): string {
  * Autentica com Google OAuth usando código de autorização
  */
 export async function authenticateWithGoogle(code: string): Promise<ApiResponse<AuthTokens>> {
+  // Obter redirect URI usado na requisição inicial
+  const redirectUri = typeof window !== "undefined" 
+    ? `${window.location.origin}/auth/callback`
+    : "http://localhost:3000/auth/callback"
+  
   return request<AuthTokens>("/auth/google", {
     method: "POST",
-    body: JSON.stringify({ code }),
+    body: JSON.stringify({ 
+      code,
+      redirectUri, // Enviar redirect URI usado pelo frontend
+    }),
   })
 }
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { getUser } from "@/lib/auth"
+import { getUserSync } from "@/lib/auth"
 
 export default function Home() {
   const router = useRouter()
@@ -18,7 +18,9 @@ export default function Home() {
     const user = getUserSync()
 
     if (user) {
-      router.push("/dashboard")
+      // O ProjectRequirementCheck vai verificar se tem projetos
+      // e redirecionar para /onboarding/create-project se necessário
+      router.push("/account")
     } else {
       router.push("/login")
     }

@@ -19,6 +19,7 @@ import Link from "next/link"
 import { MobileNav } from "./mobile-nav"
 import { ThemeToggle } from "./theme-toggle"
 import { Logo } from "./logo"
+import { AccountSelector } from "./accounts/account-selector"
 
 export function Header() {
   const router = useRouter()
@@ -40,7 +41,7 @@ export function Header() {
       <div className="flex h-16 items-center justify-between px-4 lg:px-6">
         <div className="flex items-center gap-2">
           <MobileNav />
-          <Link href="/dashboard" className="flex items-center gap-2">
+          <Link href="/account" className="flex items-center gap-2">
             <div className="flex h-8 w-8 lg:h-10 lg:w-10 items-center justify-center">
               <Logo className="h-8 w-8 lg:h-10 lg:w-10 text-primary" />
             </div>
@@ -49,6 +50,11 @@ export function Header() {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Account Selector - Organization selector */}
+          <div className="hidden md:block">
+            <AccountSelector />
+          </div>
+
           <ThemeToggle />
 
           <Link href="/plans">

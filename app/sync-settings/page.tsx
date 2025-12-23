@@ -11,6 +11,7 @@ import { Check, Copy, CheckCircle2, Plug } from "lucide-react"
 import { listMCPKeys } from "@/lib/api-mcp-keys"
 import { getMCPSettings } from "@/lib/api-sync"
 import { useToast } from "@/components/ui/use-toast"
+import { InfoTooltip } from "@/components/ui/info-tooltip"
 
 export default function SyncSettingsPage() {
   const { toast } = useToast()
@@ -150,7 +151,13 @@ export default function SyncSettingsPage() {
 
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <label className="text-sm font-medium text-foreground">JSON Configuration</label>
+                      <div className="flex items-center gap-2">
+                        <label className="text-sm font-medium text-foreground">JSON Configuration</label>
+                        <InfoTooltip
+                          title="MCP Integration"
+                          content="MCP allows your rules and documents to be accessed directly by your IDE's AI assistant. Organize your documents by folder for better context and accuracy in responses."
+                        />
+                      </div>
                       <Button variant="ghost" size="sm" onClick={() => copyToClipboard(mcpConfig, setCopiedConfig)}>
                         {copiedConfig ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
                         <span className="ml-2 text-xs">{copiedConfig ? "Copied!" : "Copy"}</span>
@@ -269,19 +276,6 @@ export default function SyncSettingsPage() {
                 </CardContent>
               </Card>
 
-              <Card className="border-border bg-gradient-to-br from-blue-500/10 to-purple-500/10">
-                <CardContent className="pt-6">
-                  <div className="flex gap-3">
-                    <div className="text-2xl">💡</div>
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium text-foreground">Pro Tip</p>
-                      <p className="text-sm text-muted-foreground">
-                        MCP allows your rules and documents to be accessed directly by your IDE's AI assistant. Organize your documents by folder for better context and accuracy in responses.
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
             </div>
           </main>
         </div>
