@@ -92,8 +92,8 @@ export async function request<T>(
     ...(options.headers as Record<string, string>),
   }
 
-  // Adiciona token Bearer se disponível
-  if (token) {
+  // Adiciona token Bearer se disponível e não fornecido nas opções
+  if (token && !headers["Authorization"]) {
     headers["Authorization"] = `Bearer ${token}`
   }
 
@@ -105,8 +105,8 @@ export async function request<T>(
       credentials: "include", // Inclui cookies se necessário
     })
 
-    // Se token expirado, tenta refresh
-    if (response.status === 401 && token) {
+    // Se token expirado, tenta refresh (exceto se já for a rota de refresh)
+    if (response.status === 401 && token && !url.includes("/auth/refresh")) {
       const refreshed = await refreshAccessToken()
       if (refreshed) {
         // Retenta a requisição com novo token
@@ -147,7 +147,7 @@ export async function request<T>(
         },
       }
     }
-    
+
     return {
       success: false,
       error: {
@@ -252,13 +252,13 @@ export function getGoogleAuthUrl(): string {
  */
 export async function authenticateWithGoogle(code: string): Promise<ApiResponse<AuthTokens>> {
   // Obter redirect URI usado na requisição inicial
-  const redirectUri = typeof window !== "undefined" 
+  const redirectUri = typeof window !== "undefined"
     ? `${window.location.origin}/auth/callback`
     : "http://localhost:3000/auth/callback"
-  
+
   return request<AuthTokens>("/auth/google", {
     method: "POST",
-    body: JSON.stringify({ 
+    body: JSON.stringify({
       code,
       redirectUri, // Enviar redirect URI usado pelo frontend
     }),

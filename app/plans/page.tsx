@@ -48,8 +48,10 @@ function PlansContent() {
     }
   }
 
-  const formatStorage = (bytes: number): string => {
+  const formatStorage = (bytes: number | undefined | null): string => {
+    if (bytes === undefined || bytes === null) return "Unlimited"
     if (bytes === 0) return "0 MB"
+    if (typeof bytes !== "number" || isNaN(bytes)) return "Unlimited"
     const mb = bytes / (1024 * 1024)
     if (mb >= 1024) {
       return `${(mb / 1024).toFixed(1)} GB`
@@ -57,28 +59,34 @@ function PlansContent() {
     return `${mb.toFixed(0)} MB`
   }
 
-  const formatLimit = (limit: number): string => {
+  const formatLimit = (limit: number | undefined | null): string => {
+    if (limit === undefined || limit === null) return "Unlimited"
     if (limit === -1 || limit === 0) return "Unlimited"
+    if (typeof limit !== "number" || isNaN(limit)) return "Unlimited"
     return limit.toLocaleString()
   }
 
   const getPlanFeatures = (plan: Plan): string[] => {
     const features: string[] = []
-    const limits = plan.limits
+    const limits = plan.limits || {}
 
-    if (limits.filesLimit === -1) {
+    if (limits.filesLimit === -1 || limits.filesLimit === undefined || limits.filesLimit === null) {
       features.push("Unlimited files")
     } else {
       features.push(`Up to ${formatLimit(limits.filesLimit)} files`)
     }
 
-    if (limits.requestsLimit === -1) {
+    if (limits.requestsLimit === -1 || limits.requestsLimit === undefined || limits.requestsLimit === null) {
       features.push("Unlimited requests")
     } else {
       features.push(`${formatLimit(limits.requestsLimit)} requests per month`)
     }
 
-    features.push(`${formatStorage(limits.storageLimit)} storage`)
+    if (limits.storageLimit !== undefined && limits.storageLimit !== null) {
+      features.push(`${formatStorage(limits.storageLimit)} storage`)
+    } else {
+      features.push("Unlimited storage")
+    }
     features.push("Unlimited folders")
     features.push("Unlimited MCP keys")
     features.push("Markdown viewer")
@@ -205,7 +213,7 @@ function PlansContent() {
                 const isEnterprise = plan.id === "enterprise"
 
                 return (
-                  <Card
+              <Card
                     key={plan.id}
                     className={`relative border-2 bg-card ${
                       isCurrentPlan
@@ -216,42 +224,42 @@ function PlansContent() {
                     }`}
                   >
                     {isCurrentPlan && (
-                      <div className="absolute -top-4 left-1/2 -translate-x-1/2">
+                  <div className="absolute -top-4 left-1/2 -translate-x-1/2">
                         <Badge className={`bg-gradient-to-r ${colors.badge} text-white px-4 py-1.5 shadow-lg`}>
                           <Icon className="h-3 w-3 mr-1 inline" />
                           Current Plan
-                        </Badge>
-                      </div>
-                    )}
+                    </Badge>
+                  </div>
+                )}
                     {isPro && !isCurrentPlan && (
-                      <div className="absolute -top-4 left-1/2 -translate-x-1/2">
+                <div className="absolute -top-4 left-1/2 -translate-x-1/2">
                         <Badge className={`bg-gradient-to-r ${colors.badge} text-white px-4 py-1.5 shadow-lg animate-pulse`}>
-                          <Sparkles className="h-3 w-3 mr-1 inline" />
+                    <Sparkles className="h-3 w-3 mr-1 inline" />
                           Most Popular
-                        </Badge>
-                      </div>
+                  </Badge>
+                </div>
                     )}
                     {isEnterprise && !isCurrentPlan && (
-                      <div className="absolute -top-4 left-1/2 -translate-x-1/2">
+                <div className="absolute -top-4 left-1/2 -translate-x-1/2">
                         <Badge className={`bg-gradient-to-r ${colors.badge} text-white px-4 py-1.5 shadow-lg`}>
-                          <Building2 className="h-3 w-3 mr-1 inline" />
+                    <Building2 className="h-3 w-3 mr-1 inline" />
                           For Enterprises
-                        </Badge>
-                      </div>
+                  </Badge>
+                </div>
                     )}
-                    <CardHeader className="text-center pb-6 pt-8">
+                <CardHeader className="text-center pb-6 pt-8">
                       <div className={`mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br ${colors.bgGradient} shadow-lg ${colors.shadow}`}>
                         <Icon className="h-8 w-8 text-white" />
-                      </div>
+                  </div>
                       <CardTitle className={`text-2xl bg-gradient-to-r ${colors.gradient} bg-clip-text text-transparent font-bold`}>
                         {plan.name}
-                      </CardTitle>
+                  </CardTitle>
                       <CardDescription className="text-base mt-2 font-medium">
                         {plan.id === "freemium" && "To get started"}
                         {plan.id === "pro" && "For professionals"}
                         {plan.id === "enterprise" && "For large teams"}
                       </CardDescription>
-                      <div className="mt-4">
+                  <div className="mt-4">
                         {plan.price === 0 ? (
                           <>
                             <span className={`text-4xl lg:text-5xl font-bold bg-gradient-to-r ${colors.gradient} bg-clip-text text-transparent`}>
@@ -262,8 +270,8 @@ function PlansContent() {
                         ) : plan.id === "enterprise" ? (
                           <>
                             <span className={`text-4xl lg:text-5xl font-bold bg-gradient-to-r ${colors.gradient} bg-clip-text text-transparent`}>
-                              Custom
-                            </span>
+                      Custom
+                    </span>
                             <span className="text-muted-foreground text-base block mt-1">Contact us</span>
                           </>
                         ) : (
@@ -274,19 +282,19 @@ function PlansContent() {
                             <span className="text-muted-foreground text-base">/month</span>
                           </>
                         )}
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-6">
-                      <ul className="space-y-2.5">
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <ul className="space-y-2.5">
                         {features.map((feature, index) => (
-                          <li key={index} className="flex items-start gap-3">
+                      <li key={index} className="flex items-start gap-3">
                             <div className={`flex h-5 w-5 items-center justify-center rounded-full ${colors.checkBg} flex-shrink-0 mt-0.5`}>
                               <Check className={`h-3.5 w-3.5 ${colors.checkText} font-bold`} />
-                            </div>
-                            <span className="text-card-foreground text-sm font-medium">{feature}</span>
-                          </li>
-                        ))}
-                      </ul>
+                        </div>
+                        <span className="text-card-foreground text-sm font-medium">{feature}</span>
+                      </li>
+                    ))}
+                  </ul>
                       {isCurrentPlan ? (
                         <Button
                           disabled
@@ -301,10 +309,10 @@ function PlansContent() {
                       ) : (
                         <Button className={`w-full bg-gradient-to-r ${colors.gradient} hover:opacity-90 text-white shadow-lg ${colors.shadow} font-semibold py-5`}>
                           Upgrade Now
-                        </Button>
+                  </Button>
                       )}
-                    </CardContent>
-                  </Card>
+                </CardContent>
+              </Card>
                 )
               })}
             </div>

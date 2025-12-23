@@ -34,7 +34,10 @@ export default function ActivityPage() {
       // Load activities
       const activitiesResponse = await listActivities({ limit: 50 })
       if (activitiesResponse.success && activitiesResponse.data) {
-        setActivities(activitiesResponse.data.data || [])
+        const activitiesData = activitiesResponse.data.data || activitiesResponse.data
+        setActivities(Array.isArray(activitiesData) ? activitiesData : [])
+      } else {
+        setActivities([])
       }
       
       // Load usage stats
@@ -53,10 +56,13 @@ export default function ActivityPage() {
       // Load history
       const historyResponse = await getActivityHistory({ days: 7 })
       if (historyResponse.success && historyResponse.data) {
-        setRequestsHistory(historyResponse.data.map((a: any) => ({
+        const historyData = Array.isArray(historyResponse.data) ? historyResponse.data : []
+        setRequestsHistory(historyData.map((a: any) => ({
           date: new Date(a.createdAt).toISOString().split("T")[0],
           count: 1, // You may need to aggregate this properly
         })))
+      } else {
+        setRequestsHistory([])
       }
     } catch (error) {
       console.error("Error loading activity data:", error)
@@ -99,7 +105,9 @@ export default function ActivityPage() {
     }
   }
 
-  const maxRequests = Math.max(...requestsHistory.map((h) => h.count), 1)
+  const maxRequests = Array.isArray(requestsHistory) && requestsHistory.length > 0
+    ? Math.max(...requestsHistory.map((h) => h.count), 1)
+    : 1
 
   return (
     <ProtectedRoute>
@@ -176,7 +184,7 @@ export default function ActivityPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    {requestsHistory.map((item, index) => {
+                    {Array.isArray(requestsHistory) && requestsHistory.map((item, index) => {
                       const date = new Date(item.date)
                       const dateLabel = date.toLocaleDateString("en-US", { day: "2-digit", month: "short" })
                       const percentage = (item.count / maxRequests) * 100
@@ -217,7 +225,7 @@ export default function ActivityPage() {
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      {activities.map((activity) => {
+                      {Array.isArray(activities) && activities.map((activity) => {
                         const date = new Date(activity.timestamp)
                         const timeLabel = date.toLocaleString("en-US", {
                           day: "2-digit",
