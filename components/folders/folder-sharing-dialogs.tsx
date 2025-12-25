@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import { Loader2, Share2, Folder as FolderIcon, FileText } from "lucide-react"
+import { Loader2, Share2, Folder as FolderIcon } from "lucide-react"
 import type { Folder, Project } from "@/lib/types/governance"
 
 interface ShareFolderDialogProps {
@@ -120,7 +120,6 @@ interface FolderDetailsDialogProps {
     isOpen: boolean
     onClose: () => void
     isLoading: boolean
-    onManageRules?: (folderId: string) => void
     onShare?: (projectIds: string[]) => Promise<void>
     isSharing?: boolean
 }
@@ -132,18 +131,18 @@ export function FolderDetailsDialog({
     isOpen,
     onClose,
     isLoading,
-    onManageRules,
     onShare,
     isSharing = false,
 }: FolderDetailsDialogProps) {
     const [selectedProjects, setSelectedProjects] = useState<string[]>(sharedProjects)
-    const [isEditingSharing, setIsEditingSharing] = useState(false)
 
     // Sincronizar selectedProjects quando sharedProjects mudar ou modal abrir
     useEffect(() => {
         if (isOpen && folder) {
             setSelectedProjects(sharedProjects)
-            setIsEditingSharing(false)
+        } else if (!isOpen) {
+            // Limpar estado quando modal fechar
+            setSelectedProjects([])
         }
     }, [isOpen, folder, sharedProjects])
 
@@ -155,18 +154,27 @@ export function FolderDetailsDialog({
         } else {
             setSelectedProjects([...selectedProjects, projectId])
         }
-        setIsEditingSharing(true)
     }
 
-    const handleSaveSharing = async () => {
+    const handleSave = async () => {
         if (onShare) {
-            await onShare(selectedProjects)
-            setIsEditingSharing(false)
+            try {
+                await onShare(selectedProjects)
+                // Fechar modal apenas se não houver erro
+                onClose()
+            } catch (error) {
+                // Em caso de erro, manter modal aberto para usuário ver o erro
+                // O erro já será exibido via toast no onShare
+            }
         }
     }
 
+    const handleCancel = () => {
+        setSelectedProjects(sharedProjects)
+        onClose()
+    }
+
     const hasChanges = JSON.stringify(selectedProjects.sort()) !== JSON.stringify(sharedProjects.sort())
-    const sharedProjectsList = projects.filter(p => sharedProjects.includes(p.id))
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
@@ -184,60 +192,37 @@ export function FolderDetailsDialog({
                 <div className="flex-1 overflow-y-auto py-4 space-y-6">
                     {/* Basic Information */}
                     <div className="space-y-4">
-                        <div>
+                    <div>
                             <Label className="text-sm font-semibold text-foreground mb-2 block">Folder Name</Label>
                             <p className="text-base font-medium text-foreground">{folder.name}</p>
-                        </div>
+                    </div>
 
-                        <div>
+                    <div>
                             <Label className="text-sm font-semibold text-foreground mb-2 block">Path</Label>
                             <p className="font-mono text-sm bg-gray-50 dark:bg-muted/30 px-3 py-2 rounded-lg border border-gray-200 dark:border-border">{folder.path || "/"}</p>
-                        </div>
+                    </div>
 
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <Label className="text-sm font-semibold text-foreground mb-2 block">Type</Label>
                                 <p className="text-sm text-muted-foreground">Account-Level Folder</p>
                             </div>
-                            <div>
+                    <div>
                                 <Label className="text-sm font-semibold text-foreground mb-2 block">Rules</Label>
                                 <p className="text-sm font-medium text-foreground">{folder.ruleCount || 0} rules</p>
                             </div>
                         </div>
                     </div>
 
-                    {/* Shared Projects - Inline Editing */}
+                    {/* Shared Projects */}
                     <div className="border-t pt-4">
-                        <div className="flex items-center justify-between mb-4">
+                        <div className="mb-4">
                             <Label className="text-sm font-semibold text-foreground">
                                 Share with Projects
-                            </Label>
-                            {isEditingSharing && hasChanges && (
-                                <div className="flex gap-2">
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => {
-                                            setSelectedProjects(sharedProjects)
-                                            setIsEditingSharing(false)
-                                        }}
-                                        disabled={isSharing}
-                                        className="h-8"
-                                    >
-                                        Cancel
-                                    </Button>
-                                    <Button
-                                        size="sm"
-                                        onClick={handleSaveSharing}
-                                        disabled={isSharing || selectedProjects.length === 0}
-                                        className="h-8"
-                                    >
-                                        {isSharing && <Loader2 className="mr-2 h-3 w-3 animate-spin" />}
-                                        <Share2 className="h-3 w-3 mr-2" />
-                                        Save
-                                    </Button>
-                                </div>
-                            )}
+                        </Label>
+                            <p className="text-xs text-muted-foreground mt-1">
+                                Select one or more projects to share this folder with
+                            </p>
                         </div>
                         {isLoading ? (
                             <div className="flex items-center justify-center gap-2 py-8">
@@ -293,21 +278,21 @@ export function FolderDetailsDialog({
                 </div>
 
                 <DialogFooter className="flex-shrink-0 pt-4 mt-4 border-t gap-2">
-                    {onManageRules && (
-                        <Button
-                            variant="default"
-                            onClick={() => {
-                                onManageRules(folder.id)
-                                onClose()
-                            }}
-                            className="flex-1 sm:flex-none"
-                        >
-                            <FileText className="h-4 w-4 mr-2" />
-                            Manage Rules
-                        </Button>
-                    )}
-                    <Button variant="outline" onClick={onClose} className="flex-1 sm:flex-none">
-                        Close
+                    <Button 
+                        variant="outline" 
+                        onClick={handleCancel} 
+                        disabled={isSharing}
+                        className="flex-1 sm:flex-none"
+                    >
+                        Cancel
+                    </Button>
+                    <Button 
+                        onClick={handleSave} 
+                        disabled={isSharing || !hasChanges}
+                        className="flex-1 sm:flex-none"
+                    >
+                        {isSharing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        Save
                     </Button>
                 </DialogFooter>
             </DialogContent>

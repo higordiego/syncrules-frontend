@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
@@ -155,6 +155,17 @@ export function FolderSettingsDialog({
             toast({ variant: "destructive", title: "Failed to remove permission" })
         }
     }
+
+    // Limpar estado quando modal fechar
+    useEffect(() => {
+        if (!isOpen) {
+            setName(folderName)
+            setIsSaving(false)
+            setIsDeleting(false)
+            setPermissions([])
+            setLoadingPermissions(false)
+        }
+    }, [isOpen, folderName])
 
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>

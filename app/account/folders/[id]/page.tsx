@@ -54,8 +54,6 @@ import {
   moveRule,
 } from "@/lib/api-rules"
 import type { Folder as GovernanceFolder, Rule } from "@/lib/types/governance"
-import { GovernanceBadge } from "@/components/governance/governance-badge"
-import { SourceOfTruthIndicator } from "@/components/governance/source-of-truth-indicator"
 import { RulesTree } from "@/components/projects/rules-tree"
 import { FolderSettingsDialog } from "@/components/projects/folder-settings-dialog"
 
@@ -104,6 +102,45 @@ export default function AccountFolderPage() {
       setSelectedFolderId(folderId)
     }
   }, [folderId])
+
+  // Limpar estados quando dialogs fecharem
+  useEffect(() => {
+    if (!isCreateFolderOpen) {
+      setFolderForm({
+        name: "",
+        path: "",
+      })
+    }
+  }, [isCreateFolderOpen])
+
+  useEffect(() => {
+    if (!isCreateFileOpen) {
+      setFileForm({
+        name: "",
+        content: "",
+        path: "",
+      })
+      setSelectedFolderId(folderId)
+    }
+  }, [isCreateFileOpen, folderId])
+
+  useEffect(() => {
+    if (!isEditOpen) {
+      setEditingItem(null)
+    }
+  }, [isEditOpen])
+
+  useEffect(() => {
+    if (!isViewOpen) {
+      setViewingItem(null)
+    }
+  }, [isViewOpen])
+
+  useEffect(() => {
+    if (!isFolderSettingsOpen) {
+      setSelectedFolderForDetails(null)
+    }
+  }, [isFolderSettingsOpen])
 
   const loadFolderAndRules = async () => {
     setIsLoading(true)
@@ -308,6 +345,19 @@ export default function AccountFolderPage() {
   }
 
   const handleMoveRule = async (ruleId: string, targetFolderId: string | null) => {
+    // Verificar se o destino é uma pasta compartilhada (não pode receber itens)
+    if (targetFolderId) {
+      const targetFolder = subFolders.find(f => f.id === targetFolderId)
+      if (targetFolder && targetFolder.accountId && !targetFolder.projectId) {
+        toast({
+          variant: "destructive",
+          title: "Cannot Move",
+          description: "Cannot move rule into a shared folder. Shared folders are read-only.",
+        })
+        return
+      }
+    }
+
     try {
       const response = await moveRule(ruleId, targetFolderId || folderId)
       if (response.success) {
@@ -812,11 +862,13 @@ export default function AccountFolderPage() {
                                   required
                                 >
                                   <option value={folderId}>{folder.name} (root)</option>
-                                  {subFolders.map((f) => (
-                                    <option key={f.id} value={f.id}>
-                                      {f.name}
-                                    </option>
-                                  ))}
+                                  {subFolders
+                                    .filter((f) => !(f.accountId && !f.projectId)) // Filtrar pastas compartilhadas
+                                    .map((f) => (
+                                      <option key={f.id} value={f.id}>
+                                        {f.name}
+                                      </option>
+                                    ))}
                                 </select>
                               </div>
                             </div>

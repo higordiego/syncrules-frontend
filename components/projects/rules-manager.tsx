@@ -42,11 +42,11 @@ import { Badge } from "@/components/ui/badge"
 import {
   listFolders,
   createFolder as createFolderAPI,
-  type Folder as GovernanceFolder,
   moveFolder,
   updateFolder,
   deleteFolder,
 } from "@/lib/api-folders"
+import type { Folder as GovernanceFolder } from "@/lib/types/governance"
 import { FolderSettingsDialog } from "@/components/projects/folder-settings-dialog"
 import { RulesTree } from "@/components/projects/rules-tree"
 import {
@@ -56,12 +56,10 @@ import {
   updateRule as updateRuleAPI,
   deleteRule as deleteRuleAPI,
   moveRule,
-  type Rule,
 } from "@/lib/api-rules"
-import { getCurrentAccountId } from "@/components/accounts/account-selector"
+import type { Rule } from "@/lib/types/governance"
+import { useAccount } from "@/context/AccountContext"
 // Removed MarkdownEditor and MarkdownViewer - rules are plain text, not markdown
-import { GovernanceBadge } from "@/components/governance/governance-badge"
-import { SourceOfTruthIndicator } from "@/components/governance/source-of-truth-indicator"
 import { useToast } from "@/components/ui/use-toast"
 
 interface RulesManagerProps {
@@ -73,7 +71,7 @@ interface RulesManagerProps {
 
 export function RulesManager({ projectId, folders, availableUsers = [], availableGroups = [] }: RulesManagerProps) {
   const { toast } = useToast()
-  const currentAccountId = getCurrentAccountId()
+  const { selectedAccountId: currentAccountId } = useAccount()
   const [projectFolders, setProjectFolders] = useState<GovernanceFolder[]>(folders)
   const [projectRules, setProjectRules] = useState<Rule[]>([])
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
@@ -108,6 +106,43 @@ export function RulesManager({ projectId, folders, availableUsers = [], availabl
   useEffect(() => {
     loadFoldersAndRules()
   }, [projectId])
+
+  // Limpar estados quando dialogs fecharem
+  useEffect(() => {
+    if (!isCreateFolderOpen) {
+      setFolderName("")
+      setFolderPath("")
+    }
+  }, [isCreateFolderOpen])
+
+  useEffect(() => {
+    if (!isCreateFileOpen) {
+      setFileForm({
+        name: "",
+        content: "",
+        path: "",
+      })
+      setSelectedFolderId(null)
+    }
+  }, [isCreateFileOpen])
+
+  useEffect(() => {
+    if (!isEditOpen) {
+      setEditingItem(null)
+    }
+  }, [isEditOpen])
+
+  useEffect(() => {
+    if (!isViewOpen) {
+      setViewingItem(null)
+    }
+  }, [isViewOpen])
+
+  useEffect(() => {
+    if (!isFolderSettingsOpen) {
+      setSelectedFolderForDetails(null)
+    }
+  }, [isFolderSettingsOpen])
 
   useEffect(() => {
     setProjectFolders(folders)
@@ -609,8 +644,21 @@ export function RulesManager({ projectId, folders, availableUsers = [], availabl
   }
 
   const handleMoveFolder = async (folderId: string, targetId: string | null) => {
+    // Verificar se o destino é uma pasta compartilhada (não pode receber itens)
+    if (targetId) {
+      const targetFolder = projectFolders.find(f => f.id === targetId)
+      if (targetFolder && targetFolder.accountId && !targetFolder.projectId) {
+        toast({
+          variant: "destructive",
+          title: "Cannot Move",
+          description: "Cannot move folder into a shared folder. Shared folders are read-only.",
+        })
+        return
+      }
+    }
+
     try {
-      const response = await moveFolder(folderId, targetId, 0) // 0 for now (append)
+      const response = await moveFolder(folderId, { parentFolderId: targetId || undefined, displayOrder: 0 }) // 0 for now (append)
       if (response.success) {
         toast({
           title: "Folder Moved",
@@ -638,6 +686,19 @@ export function RulesManager({ projectId, folders, availableUsers = [], availabl
   }
 
   const handleMoveRule = async (ruleId: string, targetFolderId: string | null) => {
+    // Verificar se o destino é uma pasta compartilhada (não pode receber itens)
+    if (targetFolderId) {
+      const targetFolder = projectFolders.find(f => f.id === targetFolderId)
+      if (targetFolder && targetFolder.accountId && !targetFolder.projectId) {
+        toast({
+          variant: "destructive",
+          title: "Cannot Move",
+          description: "Cannot move rule into a shared folder. Shared folders are read-only.",
+        })
+        return
+      }
+    }
+
     try {
       // @ts-ignore - API expects optional string, null fits if we cast or logic handles it
       // Actually we need to verify api-rules.ts signature. 
@@ -683,6 +744,18 @@ export function RulesManager({ projectId, folders, availableUsers = [], availabl
 
   const handleConfirmDeleteFolder = async () => {
     if (!folderToDeleteId) return
+
+    // Verificar se é folder compartilhada antes de tentar deletar
+    const folderToDelete = projectFolders.find(f => f.id === folderToDeleteId)
+    if (folderToDelete && folderToDelete.accountId && !folderToDelete.projectId) {
+      toast({
+        variant: "destructive",
+        title: "Cannot Delete",
+        description: "This folder is shared from Account-level and cannot be deleted from the project. Please unshare it from the Account page first.",
+      })
+      setFolderToDeleteId(null)
+      return
+    }
 
     try {
       const response = await deleteFolder(folderToDeleteId)
@@ -732,6 +805,11 @@ export function RulesManager({ projectId, folders, availableUsers = [], availabl
   // Wrapper for delete from details dialog
   const handleDeleteFromDetails = async () => {
     if (!selectedFolderForDetails) return
+
+    // Verificar se é folder compartilhada antes de tentar deletar
+    if (selectedFolderForDetails.accountId && !selectedFolderForDetails.projectId) {
+      throw new Error("This folder is shared from Account-level and cannot be deleted from the project. Please unshare it from the Account page first.")
+    }
 
     // We reuse the existing delete logic but we need to act as if it's confirmed
     try {

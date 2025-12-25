@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -27,7 +27,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Settings,
   Info,
-  GitBranch,
   Key,
   RefreshCw,
   Shield,
@@ -36,7 +35,7 @@ import {
   Trash2,
 } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
-import type { Project, InheritanceMode } from "@/lib/types/governance"
+import type { Project } from "@/lib/types/governance"
 import { useRouter } from "next/navigation"
 import { useProjectActions } from "@/lib/actions/project-actions"
 import { PermissionManager } from "@/components/governance/permission-manager"
@@ -58,7 +57,6 @@ interface ProjectSettingsDialogProps {
 export function ProjectSettingsDialog({ project }: ProjectSettingsDialogProps) {
   const router = useRouter()
   const { toast } = useToast()
-  const { updateInheritanceMode } = useProjectActions()
   const [isOpen, setIsOpen] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
 
@@ -73,8 +71,7 @@ export function ProjectSettingsDialog({ project }: ProjectSettingsDialogProps) {
   const [projectDescription, setProjectDescription] = useState(project.description || "")
   const [projectSlug, setProjectSlug] = useState(project.slug)
 
-  // Inheritance Settings
-  const [inheritanceMode, setInheritanceMode] = useState<InheritanceMode>(project.inheritanceMode)
+  // Permissions Settings
   const [inheritPermissions, setInheritPermissions] = useState(project.inheritPermissions)
 
   // MCP Settings
@@ -93,26 +90,11 @@ export function ProjectSettingsDialog({ project }: ProjectSettingsDialogProps) {
       // Simular salvamento
       await new Promise((resolve) => setTimeout(resolve, 1000))
 
-      // Se inheritance mode mudou, usar a action
-      if (inheritanceMode !== project.inheritanceMode) {
-        await updateInheritanceMode({
-          projectId: project.id,
-          mode: inheritanceMode,
-          onSuccess: () => {
-            toast({
-              title: "Settings saved",
-              description: "Project settings have been updated successfully.",
-            })
-            setIsOpen(false)
-          },
-        })
-      } else {
-        toast({
-          title: "Settings saved",
-          description: "Project settings have been updated successfully.",
-        })
-        setIsOpen(false)
-      }
+      toast({
+        title: "Settings saved",
+        description: "Project settings have been updated successfully.",
+      })
+      setIsOpen(false)
     } catch (error) {
       toast({
         variant: "destructive",
@@ -223,11 +205,34 @@ export function ProjectSettingsDialog({ project }: ProjectSettingsDialogProps) {
     }
   }
 
+  // Resetar todos os estados quando o modal fechar
+  useEffect(() => {
+    if (!isOpen) {
+      // Resetar todos os formulários para valores iniciais
+      setProjectName(project.name)
+      setProjectDescription(project.description || "")
+      setProjectSlug(project.slug)
+      setInheritPermissions(project.inheritPermissions)
+      setPermissions([])
+      setLoadingPermissions(false)
+      setIsSaving(false)
+      setIsDeleting(false)
+      setIsDeleteOpen(false)
+      // Resetar MCP settings para valores padrão
+      setMcpEnabled(true)
+      setAutoSync(true)
+      setSyncInterval("5")
+      // Resetar Advanced settings para valores padrão
+      setEnableAuditLog(true)
+      setEnableMetrics(true)
+      setMaxFileSize("10")
+    }
+  }, [isOpen, project])
+
   const hasChanges =
     projectName !== project.name ||
     projectDescription !== (project.description || "") ||
     projectSlug !== project.slug ||
-    inheritanceMode !== project.inheritanceMode ||
     inheritPermissions !== project.inheritPermissions
 
   return (
@@ -245,7 +250,7 @@ export function ProjectSettingsDialog({ project }: ProjectSettingsDialogProps) {
             Project Settings
           </DialogTitle>
           <DialogDescription className="text-base mt-2">
-            Configure project settings, inheritance, MCP integration, and advanced options
+            Configure project settings, MCP integration, and advanced options
           </DialogDescription>
         </DialogHeader>
 
@@ -257,11 +262,6 @@ export function ProjectSettingsDialog({ project }: ProjectSettingsDialogProps) {
               <Info className="h-4 w-4" />
               <span className="hidden sm:inline">General</span>
               <span className="sm:hidden">Gen</span>
-            </TabsTrigger>
-            <TabsTrigger value="inheritance" className="flex items-center gap-2 text-xs sm:text-sm">
-              <GitBranch className="h-4 w-4" />
-              <span className="hidden sm:inline">Inheritance</span>
-              <span className="sm:hidden">Inherit</span>
             </TabsTrigger>
             <TabsTrigger value="mcp" className="flex items-center gap-2 text-xs sm:text-sm">
               <Key className="h-4 w-4" />
@@ -329,82 +329,6 @@ export function ProjectSettingsDialog({ project }: ProjectSettingsDialogProps) {
                 <p className="text-xs text-muted-foreground">
                   Optional description of the project's purpose
                 </p>
-              </div>
-            </div>
-          </TabsContent>
-
-          {/* Inheritance Settings */}
-          <TabsContent value="inheritance" className="space-y-6 mt-6 flex-1 overflow-y-auto pr-2">
-            <div className="space-y-6">
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="inheritance-mode" className="text-sm font-semibold">
-                    Inheritance Mode *
-                  </Label>
-                  <p className="text-xs text-muted-foreground">
-                    Choose how this project inherits folders and rules from the Account
-                  </p>
-                </div>
-                <Select
-                  value={inheritanceMode}
-                  onValueChange={(value) => setInheritanceMode(value as InheritanceMode)}
-                >
-                  <SelectTrigger className="h-auto min-h-[3.5rem] py-3">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="p-2">
-                    <SelectItem value="full" className="px-3 py-4 rounded-lg cursor-pointer focus:bg-accent">
-                      <div className="flex flex-col gap-1.5 w-full">
-                        <span className="font-semibold text-base leading-tight">Full Inheritance</span>
-                        <span className="text-sm text-muted-foreground leading-relaxed">
-                          All Account folders synced automatically
-                        </span>
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="partial" className="px-3 py-4 rounded-lg cursor-pointer focus:bg-accent">
-                      <div className="flex flex-col gap-1.5 w-full">
-                        <span className="font-semibold text-base leading-tight">Partial Inheritance</span>
-                        <span className="text-sm text-muted-foreground leading-relaxed">
-                          Choose which folders to sync
-                        </span>
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="none" className="px-3 py-4 rounded-lg cursor-pointer focus:bg-accent">
-                      <div className="flex flex-col gap-1.5 w-full">
-                        <span className="font-semibold text-base leading-tight">No Inheritance</span>
-                        <span className="text-sm text-muted-foreground leading-relaxed">
-                          All folders local to project
-                        </span>
-                      </div>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-                {inheritanceMode !== project.inheritanceMode && (
-                  <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg flex items-start gap-2">
-                    <AlertTriangle className="h-4 w-4 text-yellow-600 dark:text-yellow-400 mt-0.5" />
-                    <p className="text-xs text-yellow-800 dark:text-yellow-200">
-                      Changing inheritance mode may affect existing synced folders. Review folder sync status before saving.
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              <Separator />
-
-              <div className="flex items-center justify-between p-4 border rounded-lg">
-                <div className="space-y-0.5">
-                  <Label htmlFor="inherit-permissions" className="text-sm font-semibold">
-                    Inherit Permissions from Account
-                  </Label>
-                  <p className="text-xs text-muted-foreground">
-                    Automatically inherit permission settings from the parent account
-                  </p>
-                </div>
-                <Switch
-                  id="inherit-permissions"
-                  checked={inheritPermissions}
-                  onCheckedChange={setInheritPermissions}
-                />
               </div>
             </div>
           </TabsContent>
