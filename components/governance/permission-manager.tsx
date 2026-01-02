@@ -30,8 +30,6 @@ import { UserGroupSelector } from "./user-group-selector"
 
 interface PermissionManagerProps {
   permissions: Permission[]
-  inheritPermissions: boolean
-  onInheritToggle: (enabled: boolean) => void
   onAddPermission: (permission: Omit<Permission, "id" | "grantedAt" | "grantedBy">) => void
   onRemovePermission: (permissionId: string) => void
   onUpdatePermission: (permissionId: string, permissionType: PermissionType) => void
@@ -49,8 +47,6 @@ interface PermissionManagerProps {
 
 export function PermissionManager({
   permissions,
-  inheritPermissions,
-  onInheritToggle,
   onAddPermission,
   onRemovePermission,
   onUpdatePermission,
@@ -218,23 +214,6 @@ export function PermissionManager({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Inherit Permissions Toggle */}
-        <div className="flex items-center justify-between p-3 border rounded-lg">
-          <div className="space-y-0.5">
-            <Label htmlFor="inherit-permissions" className="text-sm font-medium">
-              Inherit Permissions
-            </Label>
-            <p className="text-xs text-muted-foreground">
-              Inherit permissions from {resourceType === "project" ? "account" : "project"}
-            </p>
-          </div>
-          <Switch
-            id="inherit-permissions"
-            checked={inheritPermissions}
-            onCheckedChange={onInheritToggle}
-          />
-        </div>
-
         {/* Permissions List */}
         <div className="space-y-2">
           {permissions.length === 0 ? (
@@ -262,11 +241,6 @@ export function PermissionManager({
                           permissionType={permission.permissionType}
                           targetType={permission.targetType}
                         />
-                        {permission.inheritedFrom && (
-                          <Badge variant="outline" className="text-xs">
-                            Inherited
-                          </Badge>
-                        )}
                       </div>
                       <p className="text-xs text-muted-foreground">
                         {permission.targetType === "group" ? "Group" : "User"} • Granted{" "}
@@ -275,13 +249,11 @@ export function PermissionManager({
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    {!permission.inheritedFrom && (
-                      <>
-                        <Select
-                          value={permission.permissionType}
-                          onValueChange={(value) =>
-                            onUpdatePermission(permission.id, value as PermissionType)
-                          }
+                    <Select
+                      value={permission.permissionType}
+                      onValueChange={(value) =>
+                        onUpdatePermission(permission.id, value as PermissionType)
+                      }
                         >
                           <SelectTrigger className="w-[120px]">
                             <SelectValue />
@@ -299,8 +271,6 @@ export function PermissionManager({
                         >
                           <X className="h-4 w-4" />
                         </Button>
-                      </>
-                    )}
                   </div>
                 </div>
               )
