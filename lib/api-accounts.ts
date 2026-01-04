@@ -67,3 +67,23 @@ export async function deleteAccount(id: string): Promise<ApiResponse<void>> {
   })
 }
 
+import { User } from "./api-users"
+
+export interface AccountMember {
+  id: string
+  accountId: string
+  userId: string
+  role: "owner" | "admin" | "member"
+  createdAt: string
+  userName?: string
+  userEmail?: string
+  userPicture?: string
+}
+
+/**
+ * Lista membros de uma organização
+ */
+export async function getAccountMembers(accountId: string): Promise<ApiResponse<AccountMember[]>> {
+  return request<AccountMember[]>(`/accounts/${accountId}/members`)
+}
+

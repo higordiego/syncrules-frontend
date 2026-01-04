@@ -27,6 +27,8 @@ import { Users, User, Plus, X, Shield, Edit, Lock } from "lucide-react"
 import type { Permission, PermissionType, PermissionTargetType, User as UserType, Group } from "@/lib/types/governance"
 import { PermissionBadge } from "./permission-badge"
 import { UserGroupSelector } from "./user-group-selector"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { useConfirm } from "@/lib/hooks/use-confirm"
 
 interface PermissionManagerProps {
   permissions: Permission[]
@@ -65,6 +67,7 @@ export function PermissionManager({
   const [selectedTargetType, setSelectedTargetType] = useState<PermissionTargetType>("user")
   const [selectedTargetId, setSelectedTargetId] = useState<string>("")
   const [selectedPermissionType, setSelectedPermissionType] = useState<PermissionType>("read")
+  const { confirm, ConfirmDialog } = useConfirm()
 
   const handleAddPermission = () => {
     if (!selectedTargetId) return
@@ -97,6 +100,31 @@ export function PermissionManager({
         return Lock
       default:
         return X
+    }
+  }
+
+  const handleRemovePermission = async (permission: Permission) => {
+    // Buscar informações do usuário ou grupo para exibir no modal
+    const user = permission.targetType === "user" 
+      ? availableUsers.find((u) => u.id === permission.targetId)
+      : null
+    const group = permission.targetType === "group"
+      ? availableGroups.find((g) => g.id === permission.targetId)
+      : null
+
+    const targetName = user ? user.name : group ? group.name : permission.targetName
+    const resourceTypeLabel = resourceType === "project" ? "projeto" : "pasta"
+
+    const confirmed = await confirm({
+      title: "Remover Permissão",
+      description: `Tem certeza que deseja remover a permissão de ${targetName} da ${resourceTypeLabel} "${resourceName}"? Esta ação não pode ser desfeita.`,
+      variant: "destructive",
+      confirmText: "Remover",
+      cancelText: "Cancelar",
+    })
+
+    if (confirmed) {
+      onRemovePermission(permission.id)
     }
   }
 
@@ -223,6 +251,16 @@ export function PermissionManager({
           ) : (
             permissions.map((permission) => {
               const PermissionIcon = getPermissionIcon(permission.permissionType)
+              // Buscar informações do usuário se for uma permissão de usuário
+              const user = permission.targetType === "user" 
+                ? availableUsers.find((u) => u.id === permission.targetId)
+                : null
+              
+              // Buscar informações do grupo se for uma permissão de grupo
+              const group = permission.targetType === "group"
+                ? availableGroups.find((g) => g.id === permission.targetId)
+                : null
+
               return (
                 <div
                   key={permission.id}
@@ -230,20 +268,33 @@ export function PermissionManager({
                 >
                   <div className="flex items-center gap-3">
                     {permission.targetType === "group" ? (
-                      <Users className="h-5 w-5 text-muted-foreground" />
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
+                        <Users className="h-5 w-5 text-muted-foreground" />
+                      </div>
+                    ) : user ? (
+                      <Avatar className="h-10 w-10">
+                        <AvatarImage src={user.picture} alt={user.name || permission.targetName} />
+                        <AvatarFallback className="bg-blue-500 text-white text-sm">
+                          {user.name ? user.name.charAt(0).toUpperCase() : permission.targetName.charAt(0).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
                     ) : (
-                      <User className="h-5 w-5 text-muted-foreground" />
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
+                        <User className="h-5 w-5 text-muted-foreground" />
+                      </div>
                     )}
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="font-medium">{permission.targetName}</span>
+                        <span className="font-medium">
+                          {user ? user.name : group ? group.name : permission.targetName}
+                        </span>
                         <PermissionBadge
                           permissionType={permission.permissionType}
                           targetType={permission.targetType}
                         />
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        {permission.targetType === "group" ? "Group" : "User"} • Granted{" "}
+                        {permission.targetType === "group" ? "Group" : user?.email || "User"} • Granted{" "}
                         {new Date(permission.grantedAt).toLocaleDateString()}
                       </p>
                     </div>
@@ -267,7 +318,7 @@ export function PermissionManager({
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => onRemovePermission(permission.id)}
+                          onClick={() => handleRemovePermission(permission)}
                         >
                           <X className="h-4 w-4" />
                         </Button>
@@ -278,6 +329,7 @@ export function PermissionManager({
           )}
         </div>
       </CardContent>
+      <ConfirmDialog />
     </Card>
   )
 }

@@ -10,74 +10,28 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Building2, Plus, ArrowRight, Check } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
-import { listAccounts, createAccount, type Account } from "@/lib/api-accounts"
-import { setCurrentAccountId, setDefaultAccountId } from "@/components/accounts/account-selector"
+import { createAccount } from "@/lib/api-accounts"
+import { useAccount } from "@/context/AccountContext"
 
 function SelectAccountContent() {
   const router = useRouter()
   const { toast } = useToast()
-  const [accounts, setAccounts] = useState<Account[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+  const { accounts, isLoading: isAccountsLoading, switchAccount, refreshAccounts } = useAccount()
   const [isCreating, setIsCreating] = useState(false)
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [accountName, setAccountName] = useState("")
 
-  // Buscar accounts do usuário
+  // Se não tiver accounts, mostrar formulário de criação automaticamente
   useEffect(() => {
-    const fetchAccounts = async () => {
-      setIsLoading(true)
-      try {
-        const response = await listAccounts()
-        
-        // Validar resposta da API
-        if (response.success) {
-          // Se response.data existe e é um array
-          if (response.data && Array.isArray(response.data)) {
-            setAccounts(response.data)
-            // Se não tiver accounts, mostrar formulário de criação automaticamente
-            if (response.data.length === 0) {
-              setShowCreateForm(true)
-            } else {
-              setShowCreateForm(false)
-            }
-          } else {
-            // Se data não é um array válido, tratar como vazio
-            console.warn("API returned invalid data format:", response.data)
-            setAccounts([])
-            setShowCreateForm(true)
-          }
-        } else {
-          // Se API retornou erro, mostrar mensagem mas permitir criar
-          console.error("API error:", response.error)
-          toast({
-            title: "Warning",
-            description: response.error?.message || "Could not load organizations. You can create a new one.",
-            variant: "destructive",
-          })
-          setAccounts([])
-          setShowCreateForm(true)
-        }
-      } catch (error) {
-        console.error("Failed to fetch accounts:", error)
-        toast({
-          title: "Error",
-          description: "Failed to load organizations. You can still create a new one.",
-          variant: "destructive",
-        })
-        // Em caso de erro, permitir criar organização
-        setAccounts([])
-        setShowCreateForm(true)
-      } finally {
-        setIsLoading(false)
-      }
+    if (!isAccountsLoading && accounts.length === 0) {
+      setShowCreateForm(true)
     }
-
-    fetchAccounts()
-  }, [toast])
+  }, [isAccountsLoading, accounts])
 
   const handleSelectAccount = (accountId: string) => {
-    setCurrentAccountId(accountId)
-    setDefaultAccountId(accountId)
+    switchAccount(accountId)
+    // Redirecionamento é tratado pelo switchAccount ou useEffect se necessário, 
+    // mas aqui fazemos manual para garantir
     router.push("/account")
   }
 
@@ -93,16 +47,15 @@ function SelectAccountContent() {
           title: "Organization created",
           description: `${response.data.name} has been created successfully.`,
         })
-        
-        // Adicionar à lista
-        setAccounts([...accounts, response.data])
+
+        // Recarregar lista no context
+        await refreshAccounts()
         setShowCreateForm(false)
         setAccountName("")
-        
-        // Selecionar automaticamente e redirecionar
-        setCurrentAccountId(response.data.id)
-        setDefaultAccountId(response.data.id)
-        
+
+        // Selecionar automaticamente
+        switchAccount(response.data.id)
+
         setTimeout(() => {
           router.push("/account")
         }, 500)
@@ -125,7 +78,7 @@ function SelectAccountContent() {
     }
   }
 
-  if (isLoading) {
+  if (isAccountsLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900 p-4">
         <div className="w-full max-w-2xl">
@@ -160,8 +113,8 @@ function SelectAccountContent() {
                 {showCreateForm && accounts.length === 0
                   ? "Create your first organization to get started"
                   : accounts.length > 0
-                  ? "Choose an organization to continue, or create a new one"
-                  : "Create your first organization to get started"}
+                    ? "Choose an organization to continue, or create a new one"
+                    : "Create your first organization to get started"}
               </CardDescription>
             </div>
           </CardHeader>

@@ -146,10 +146,6 @@ export function RulesManager({ projectId, folders, availableUsers = [], availabl
 
   useEffect(() => {
     setProjectFolders(folders)
-    // Se não tiver folder selecionado, seleciona o primeiro por padrão
-    if (!selectedFolderId && folders && folders.length > 0) {
-      setSelectedFolderId(folders[0].id)
-    }
   }, [folders])
 
   const loadFoldersAndRules = async () => {
@@ -250,15 +246,8 @@ export function RulesManager({ projectId, folders, availableUsers = [], availabl
     e.preventDefault()
     console.log("handleAddFile started", { selectedFolderId, fileForm })
 
-    if (!selectedFolderId) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Please select a folder first.",
-      })
-      console.error("handleAddFile: No folder selected")
-      return
-    }
+    // Allow root creation (no selectedFolderId) 
+    // if (!selectedFolderId) { ... } -> Removed restriction
 
     if (!fileForm.name || !fileForm.content) {
       toast({
@@ -282,10 +271,14 @@ export function RulesManager({ projectId, folders, availableUsers = [], availabl
         finalName += ".rule"
       }
 
-      const path = fileForm.path || `/${selectedFolderId}/${finalName.toLowerCase().replace(/\s+/g, "-")}`
+      // Path depends on if it's in a folder or root
+      const path = selectedFolderId
+        ? `/${selectedFolderId}/${finalName.toLowerCase().replace(/\s+/g, "-")}`
+        : `/${finalName.toLowerCase().replace(/\s+/g, "-")}`
+
       const response = await createRuleAPI({
         projectId: projectId,
-        folderId: selectedFolderId,
+        folderId: selectedFolderId || undefined, // undefined sends empty/null
         name: finalName,
         content: fileForm.content,
         path: path,
@@ -293,9 +286,12 @@ export function RulesManager({ projectId, folders, availableUsers = [], availabl
       if (response.success && response.data) {
         setFileForm({ name: "", content: "", path: "" })
         setIsCreateFileOpen(false)
-        setExpandedFolders((prev) => new Set(prev).add(selectedFolderId))
+        if (selectedFolderId) {
+          setExpandedFolders((prev) => new Set(prev).add(selectedFolderId))
+        }
         await loadFoldersAndRules()
         toast({
+          variant: "success",
           title: "Rule Created",
           description: `Rule "${response.data.name}" created successfully.`,
         })
@@ -316,9 +312,27 @@ export function RulesManager({ projectId, folders, availableUsers = [], availabl
     }
   }
 
+  // ... (handleEditItem and subsequent functions remain unchanged from previous edit, so we skip them here and focus on the UI part in another chunk or ensure we don't overwrite)
+  // Wait, I am replacing code block. I need to be careful with line numbers.
+  // I will just replace `handleAddFile` first.
+
+
   const handleEditItem = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!editingItem) return
+
+    // Check if rule is in a shared folder
+    if (editingItem.folderId) {
+      const parentFolder = projectFolders.find(f => f.id === editingItem.folderId)
+      if (parentFolder && parentFolder.accountId && !parentFolder.projectId) {
+        toast({
+          variant: "destructive",
+          title: "Cannot Edit",
+          description: "This rule belongs to a shared folder and cannot be edited in this project.",
+        })
+        return
+      }
+    }
 
     try {
       const response = await updateRuleAPI(editingItem.id, {
@@ -352,6 +366,21 @@ export function RulesManager({ projectId, folders, availableUsers = [], availabl
 
   const handleDeleteItem = async () => {
     if (!deleteItemId) return
+
+    // Check if rule is in a shared folder
+    const ruleToDelete = projectRules.find(r => r.id === deleteItemId)
+    if (ruleToDelete && ruleToDelete.folderId) {
+      const parentFolder = projectFolders.find(f => f.id === ruleToDelete.folderId)
+      if (parentFolder && parentFolder.accountId && !parentFolder.projectId) {
+        toast({
+          variant: "destructive",
+          title: "Cannot Delete",
+          description: "This rule belongs to a shared folder and cannot be deleted from this project.",
+        })
+        setDeleteItemId(null)
+        return
+      }
+    }
 
     try {
       const response = await deleteRuleAPI(deleteItemId)
@@ -492,17 +521,8 @@ export function RulesManager({ projectId, folders, availableUsers = [], availabl
       return
     }
 
-    if (!selectedFolderId) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Please select a folder first.",
-      })
-      if (e.target) {
-        e.target.value = ""
-      }
-      return
-    }
+    // Allow root upload if no folder selected
+    // if (!selectedFolderId) { ... } -> Removed restriction
 
     setUploading(true)
     try {
@@ -512,11 +532,15 @@ export function RulesManager({ projectId, folders, availableUsers = [], availabl
         // Remove extensões .md, .txt, etc. e adiciona .rule
         const baseName = file.name.replace(/\.[^/.]+$/, "") // Remove extensão
         const name = `${baseName}.rule`
-        const path = `/${selectedFolderId}/${name}`
+
+        // If selectedFolderId is set, put in folder. Else root.
+        const path = selectedFolderId
+          ? `/${selectedFolderId}/${name}`
+          : `/${name}`
 
         return createRuleAPI({
           projectId: projectId,
-          folderId: selectedFolderId,
+          folderId: selectedFolderId || undefined, // undefined sends empty/null to backend for root
           name: name,
           content: content,
           path: path,
@@ -973,9 +997,9 @@ export function RulesManager({ projectId, folders, availableUsers = [], availabl
                         value={selectedFolderId || ""}
                         onChange={(e) => setSelectedFolderId(e.target.value)}
                         className="w-full flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                        required
+
                       >
-                        <option value="" disabled>Select a folder</option>
+                        <option value="">Project Root ( / )</option>
                         {projectFolders.map((f) => (
                           <option key={f.id} value={f.id}>
                             {f.name}
@@ -1112,6 +1136,10 @@ export function RulesManager({ projectId, folders, availableUsers = [], availabl
               onMoveRule={handleMoveRule}
               onEditFolder={handleOpenFolderSettings}
               onDeleteFolder={setFolderToDeleteId}
+              onViewRule={(rule) => {
+                setViewingItem(rule)
+                setIsViewOpen(true)
+              }}
             />
           </div>
         </CardContent>
@@ -1171,20 +1199,30 @@ export function RulesManager({ projectId, folders, availableUsers = [], availabl
                 <FileText className="h-5 w-5 text-green-600" />
                 {viewingItem?.name}
               </DialogTitle>
-              {viewingItem && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setEditingItem(viewingItem)
-                    setIsViewOpen(false)
-                    setIsEditOpen(true)
-                  }}
-                >
-                  <Edit className="h-4 w-4 mr-2" />
-                  Edit
-                </Button>
-              )}
+              {viewingItem && (() => {
+                // Check if item is read-only (shared)
+                const isAccountRule = viewingItem.accountId && !viewingItem.projectId
+                const parentFolder = viewingItem.folderId ? projectFolders.find(f => f.id === viewingItem.folderId) : null
+                const isSharedFolder = parentFolder && parentFolder.accountId && !parentFolder.projectId
+                const isReadOnly = isAccountRule || isSharedFolder
+
+                if (isReadOnly) return null
+
+                return (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setEditingItem(viewingItem)
+                      setIsViewOpen(false)
+                      setIsEditOpen(true)
+                    }}
+                  >
+                    <Edit className="h-4 w-4 mr-2" />
+                    Edit
+                  </Button>
+                )
+              })()}
             </div>
           </DialogHeader>
           <div className="flex-1 overflow-y-auto py-4 min-h-0">

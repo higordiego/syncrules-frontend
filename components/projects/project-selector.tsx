@@ -21,7 +21,7 @@ import { Badge } from "@/components/ui/badge"
 import { Check, ChevronsUpDown, Plus, FolderKanban } from "lucide-react"
 import { mockProjects } from "@/lib/mock-data/governance"
 import { getUserProjects } from "./project-requirement-check"
-import { getCurrentAccountId } from "@/components/accounts/account-selector"
+import { useAccount } from "@/context/AccountContext"
 import { useToast } from "@/components/ui/use-toast"
 import Link from "next/link"
 import type { Project } from "@/lib/types/governance"
@@ -55,13 +55,13 @@ interface ProjectSelectorProps {
 }
 
 export function ProjectSelector({ projects, onProjectChange }: ProjectSelectorProps) {
-  // Filtrar projetos pela organização selecionada
-  const currentAccountId = getCurrentAccountId()
+  // Filtrar projetos pela organização selecionada via context
+  const { selectedAccountId: currentAccountId } = useAccount()
   const allUserProjects = getUserProjects() || mockProjects
   const accountProjects = currentAccountId
     ? allUserProjects.filter((p) => p.accountId === currentAccountId)
     : allUserProjects
-  
+
   // Usar projetos fornecidos ou filtrados por account
   const userProjects = projects || accountProjects
   const router = useRouter()
@@ -82,15 +82,15 @@ export function ProjectSelector({ projects, onProjectChange }: ProjectSelectorPr
     const urlProjectId = extractProjectIdFromPath(pathname)
     const stored = getCurrentProjectId()
     const defaultProject = getDefaultProjectId()
-    
+
     // Função para validar se projeto pertence à organização atual
     const isValidProject = (projId: string | null): boolean => {
       if (!projId) return false
       return userProjects.some((p) => p.id === projId)
     }
-    
+
     let initialProjectId: string | null = null
-    
+
     if (urlProjectId && isValidProject(urlProjectId)) {
       // Se há projeto na URL e ele pertence à org atual, usar ele
       initialProjectId = urlProjectId
@@ -111,7 +111,7 @@ export function ProjectSelector({ projects, onProjectChange }: ProjectSelectorPr
       setCurrentProjectIdState(null)
       return
     }
-    
+
     if (initialProjectId) {
       setCurrentProjectIdState(initialProjectId)
     }
@@ -123,7 +123,7 @@ export function ProjectSelector({ projects, onProjectChange }: ProjectSelectorPr
     setCurrentProjectId(projectId)
     setCurrentProjectIdState(projectId)
     setOpen(false)
-    
+
     if (onProjectChange) {
       onProjectChange(projectId)
     }
@@ -145,7 +145,7 @@ export function ProjectSelector({ projects, onProjectChange }: ProjectSelectorPr
     setDefaultProjectId(projectId)
     setCurrentProjectId(projectId)
     setCurrentProjectIdState(projectId)
-    
+
     toast({
       title: "Default project set",
       description: `${userProjects.find((p: Project) => p.id === projectId)?.name || "Project"} is now your default project`,
@@ -205,9 +205,8 @@ export function ProjectSelector({ projects, onProjectChange }: ProjectSelectorPr
                   >
                     <div className="flex items-center gap-2 flex-1 min-w-0">
                       <Check
-                        className={`h-4 w-4 shrink-0 ${
-                          isSelected ? "opacity-100" : "opacity-0"
-                        }`}
+                        className={`h-4 w-4 shrink-0 ${isSelected ? "opacity-100" : "opacity-0"
+                          }`}
                       />
                       <span className="truncate">{project.name}</span>
                       {isProjectDefault && (

@@ -2,8 +2,6 @@
  * Core Domain Types for Context Governance Platform
  */
 
-export type InheritanceMode = "full" | "partial" | "none"
-export type SyncStatus = "synced" | "detached" | "local"
 export type FolderStatus = "read-only" | "editable"
 export type IDEType = "vscode" | "cursor" | "jetbrains" | "neovim" | "other"
 
@@ -69,9 +67,7 @@ export interface Project {
   name: string
   slug: string
   description?: string
-  inheritanceMode: InheritanceMode
   permissions: Permission[] // Permissions for this project
-  inheritPermissions: boolean // Whether to inherit permissions from account
   createdAt: string
   updatedAt: string
   // Project-specific folders and rules
@@ -86,12 +82,10 @@ export interface Folder {
   id: string
   accountId?: string // If defined at account level
   projectId?: string // If defined at project level
+  parentFolderId?: string // Parent folder ID for hierarchical structure
   name: string
   path: string
-  syncStatus: SyncStatus
   folderStatus: FolderStatus
-  inheritedFrom?: string // Account ID if inherited
-  sourceOfTruth: "account" | "project"
   permissions: Permission[] // Permissions for this folder
   inheritPermissions: boolean // Whether to inherit permissions from project/account
   ruleCount: number
@@ -110,25 +104,11 @@ export interface Rule {
   name: string
   content: string
   path: string
-  syncStatus: SyncStatus
   folderStatus: FolderStatus
-  inheritedFrom?: string
-  sourceOfTruth: "account" | "project"
   usageCount: number
   lastUsedAt?: string
   createdAt: string
   updatedAt: string
-}
-
-/**
- * Inheritance Configuration
- */
-export interface InheritanceConfig {
-  projectId: string
-  mode: InheritanceMode
-  syncedFolders: string[] // Folder IDs that are synced
-  detachedFolders: string[] // Folder IDs that are detached
-  lastSyncAt?: string
 }
 
 /**
@@ -217,12 +197,9 @@ export interface AuditLog {
   | "project.created"
   | "project.updated"
   | "project.deleted"
-  | "folder.synced"
-  | "folder.detached"
   | "rule.created"
   | "rule.updated"
   | "rule.deleted"
-  | "inheritance.changed"
   | "permission.granted"
   | "permission.revoked"
   | "mcp_key.created"
@@ -234,7 +211,7 @@ export interface AuditLog {
   | "group.created"
   | "group.updated"
   | "group.deleted"
-  resourceType: "project" | "folder" | "rule" | "inheritance" | "permission" | "mcp_key" | "user" | "group"
+  resourceType: "project" | "folder" | "rule" | "permission" | "mcp_key" | "user" | "group"
   resourceId: string
   changes?: Record<string, { from: unknown; to: unknown }>
   timestamp: string

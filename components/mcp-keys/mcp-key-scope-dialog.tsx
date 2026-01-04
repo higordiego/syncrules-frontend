@@ -236,6 +236,7 @@ export function MCPKeyScopeDialog({
           const response = await updateMCPKey(existingKey.id, baseData)
           if (response.success) {
             toast({
+              variant: "success",
               title: "Success",
               description: "MCP key updated successfully",
             })
@@ -247,6 +248,7 @@ export function MCPKeyScopeDialog({
           if (response.success && response.data) {
             // Não marcar como vista automaticamente - o usuário deve clicar em "Reveal" na página principal
             toast({
+              variant: "success",
               title: "Success",
               description: "MCP key created successfully! Click 'Reveal' to view the key. It will only be shown once.",
               duration: 8000,

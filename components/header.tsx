@@ -20,10 +20,14 @@ import { MobileNav } from "./mobile-nav"
 import { ThemeToggle } from "./theme-toggle"
 import { Logo } from "./logo"
 import { AccountSelector } from "./accounts/account-selector"
+import { useAccount } from "@/context/AccountContext"
+import { cn } from "@/lib/utils"
 
 export function Header() {
   const router = useRouter()
   const user = getUserSync()
+  const { selectedAccount } = useAccount()
+  const plan = selectedAccount?.plan || user?.plan || "freemium"
 
   const handleLogout = async () => {
     try {
@@ -33,6 +37,28 @@ export function Header() {
     } finally {
       clearUser()
       router.push("/login")
+    }
+  }
+
+  const getPlanBadgeStyle = (plan: string) => {
+    switch (plan) {
+      case "enterprise":
+        return "bg-gradient-to-r from-purple-500/10 to-purple-600/10 text-purple-600 dark:text-purple-400 border-purple-200 dark:border-purple-800 hover:from-purple-500/20 hover:to-purple-600/20"
+      case "pro":
+        return "bg-gradient-to-r from-green-500/10 to-green-600/10 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800 hover:from-green-500/20 hover:to-green-600/20"
+      default:
+        return "bg-gradient-to-r from-blue-500/10 to-blue-600/10 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800 hover:from-blue-500/20 hover:to-blue-600/20"
+    }
+  }
+
+  const getPlanName = (plan: string) => {
+    switch (plan) {
+      case "enterprise":
+        return "Enterprise"
+      case "pro":
+        return "Pro"
+      default:
+        return "Freemium"
     }
   }
 
@@ -60,10 +86,13 @@ export function Header() {
           <Link href="/plans">
             <Badge
               variant="secondary"
-              className="hidden sm:flex gap-1 px-3 py-1 bg-gradient-to-r from-blue-500/10 to-blue-600/10 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800 hover:from-blue-500/20 hover:to-blue-600/20 cursor-pointer transition-colors"
+              className={cn(
+                "hidden sm:flex gap-1 px-3 py-1 cursor-pointer transition-colors",
+                getPlanBadgeStyle(plan)
+              )}
             >
               <CreditCard className="h-3 w-3" />
-              Freemium
+              {getPlanName(plan)}
             </Badge>
           </Link>
 
@@ -92,12 +121,7 @@ export function Header() {
                   Profile
                 </Link>
               </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link href="/activity" className="cursor-pointer flex items-center">
-                  <BarChart3 className="mr-2 h-4 w-4" />
-                  Activity
-                </Link>
-              </DropdownMenuItem>
+
               <DropdownMenuItem asChild>
                 <Link href="/plans" className="cursor-pointer flex items-center">
                   <CreditCard className="mr-2 h-4 w-4" />

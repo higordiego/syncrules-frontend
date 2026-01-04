@@ -95,7 +95,6 @@ export const mockProjects: Project[] = [
     name: "Frontend Team",
     slug: "frontend-team",
     description: "Frontend development rules and guidelines",
-    inheritanceMode: "full",
     permissions: [
       {
         id: "perm-001",
@@ -128,7 +127,6 @@ export const mockProjects: Project[] = [
     name: "Backend Team",
     slug: "backend-team",
     description: "Backend development standards",
-    inheritanceMode: "partial",
     permissions: [
       {
         id: "perm-003",
@@ -152,7 +150,6 @@ export const mockProjects: Project[] = [
     name: "DevOps",
     slug: "devops",
     description: "DevOps and infrastructure rules",
-    inheritanceMode: "none",
     permissions: [
       {
         id: "perm-004",
@@ -487,38 +484,8 @@ export const mockAuditLogs: AuditLog[] = [
     resourceId: "proj-001",
     changes: {
       name: { from: null, to: "Frontend Team" },
-      inheritanceMode: { from: null, to: "full" },
     },
     timestamp: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: "audit-002",
-    accountId: "acc-001",
-    projectId: "proj-001",
-    userId: "user-001",
-    action: "folder.synced",
-    resourceType: "folder",
-    resourceId: "folder-acc-001",
-    changes: {
-      syncStatus: { from: "local", to: "synced" },
-    },
-    timestamp: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: "audit-003",
-    accountId: "acc-001",
-    projectId: "proj-002",
-    userId: "user-001",
-    action: "folder.detached",
-    resourceType: "folder",
-    resourceId: "folder-acc-003",
-    changes: {
-      syncStatus: { from: "synced", to: "detached" },
-    },
-    timestamp: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000 + 2 * 60 * 60 * 1000).toISOString(),
-    metadata: {
-      warning: "Breaking sync will create local copy",
-    },
   },
   {
     id: "audit-004",
@@ -572,22 +539,6 @@ export const mockAuditLogs: AuditLog[] = [
       name: { from: null, to: "Production Key" },
     },
     timestamp: new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: "audit-008",
-    accountId: "acc-001",
-    projectId: "proj-002",
-    userId: "user-001",
-    action: "inheritance.changed",
-    resourceType: "inheritance",
-    resourceId: "proj-002",
-    changes: {
-      inheritanceMode: { from: "full", to: "partial" },
-    },
-    timestamp: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(),
-    metadata: {
-      warning: "Changing inheritance mode may affect synced folders",
-    },
   },
   {
     id: "audit-009",

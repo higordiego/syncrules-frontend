@@ -49,6 +49,10 @@ import {
   type CreateProjectPermissionData,
 } from "@/lib/api-project-permissions"
 import { deleteProject } from "@/lib/api-projects"
+import { getAccountMembers } from "@/lib/api-accounts"
+import { listGroups } from "@/lib/api-groups"
+import { searchUserByEmail } from "@/lib/api-users"
+import type { User, Group } from "@/lib/types/governance"
 
 interface ProjectSettingsDialogProps {
   project: Project
@@ -63,6 +67,8 @@ export function ProjectSettingsDialog({ project }: ProjectSettingsDialogProps) {
   // Permissions State
   const [permissions, setPermissions] = useState<Permission[]>([])
   const [loadingPermissions, setLoadingPermissions] = useState(false)
+  const [availableUsers, setAvailableUsers] = useState<User[]>([])
+  const [availableGroups, setAvailableGroups] = useState<Group[]>([])
   const [isDeleteOpen, setIsDeleteOpen] = useState(false) // For delete confirmation
   const [isDeleting, setIsDeleting] = useState(false)
 
@@ -80,8 +86,7 @@ export function ProjectSettingsDialog({ project }: ProjectSettingsDialogProps) {
   const [syncInterval, setSyncInterval] = useState("5") // minutes
 
   // Advanced Settings
-  const [enableAuditLog, setEnableAuditLog] = useState(true)
-  const [enableMetrics, setEnableMetrics] = useState(true)
+
   const [maxFileSize, setMaxFileSize] = useState("10") // MB
 
   const handleSave = async () => {
@@ -91,6 +96,7 @@ export function ProjectSettingsDialog({ project }: ProjectSettingsDialogProps) {
       await new Promise((resolve) => setTimeout(resolve, 1000))
 
       toast({
+        variant: "success",
         title: "Settings saved",
         description: "Project settings have been updated successfully.",
       })
@@ -110,12 +116,77 @@ export function ProjectSettingsDialog({ project }: ProjectSettingsDialogProps) {
   const loadPermissions = async () => {
     setLoadingPermissions(true)
     try {
-      const response = await listProjectPermissions(project.id)
-      if (response.success && response.data) {
-        setPermissions(response.data)
+      // Load data in parallel but don't fail properly if one fails (use allSettled logic effectively)
+      const permsPromise = listProjectPermissions(project.id).catch(e => ({ success: false, data: [], error: e }))
+      const membersPromise = getAccountMembers(project.accountId).catch(e => ({ success: false, data: [], error: e }))
+      const groupsPromise = listGroups().catch(e => ({ success: false, data: [], error: e }))
+
+      const [permsResponse, membersResponse, groupsResponse] = await Promise.all([
+        permsPromise,
+        membersPromise,
+        groupsPromise
+      ])
+
+      let users: User[] = []
+      // @ts-ignore - catch block above returns object matching structure mostly
+      if (membersResponse.success && membersResponse.data) {
+        // @ts-ignore
+        users = membersResponse.data.map((m: any) => ({
+          id: m.userId,
+          email: m.userEmail || "",
+          name: m.userName || "Unknown",
+          picture: m.userPicture
+        }))
+        setAvailableUsers(users)
+      }
+
+      let groups: Group[] = []
+      // @ts-ignore
+      if (groupsResponse.success && groupsResponse.data) {
+        // @ts-ignore
+        groups = groupsResponse.data.map((g: any) => ({
+          id: g.id,
+          name: g.name,
+          description: g.description,
+          accountId: g.accountIds?.[0] || project.accountId,
+          members: [],
+          memberCount: 0,
+          createdBy: "system",
+          createdAt: g.createdAt,
+          updatedAt: g.updatedAt
+        }))
+        setAvailableGroups(groups)
+      }
+
+      // @ts-ignore
+      if (permsResponse.success && permsResponse.data) {
+        // @ts-ignore
+        const enrichedPermissions = permsResponse.data.map((p) => {
+          let targetName = "Unknown"
+          if (p.targetType === "user") {
+            const u = users.find(user => user.id === p.targetId)
+            targetName = u ? u.name : (p.targetName || "Unknown User")
+          } else {
+            const g = groups.find(group => group.id === p.targetId)
+            targetName = g ? g.name : (p.targetName || "Unknown Group")
+          }
+          return { ...p, targetName }
+        })
+        setPermissions(enrichedPermissions)
+        // console.log("Loaded permissions:", enrichedPermissions.length)
+        toast({ variant: "success", title: "Permissions loaded", description: `${enrichedPermissions.length} permissions found.` })
+      } else {
+        // Fallback or error handling
+        if (!permsResponse.success) {
+          console.error("List permissions failed:", permsResponse.error)
+          toast({ variant: "destructive", title: "Failed to fetch permissions" })
+        }
+        setPermissions([]) // Clear permissions on failure
       }
     } catch (error) {
-      console.error("Failed to load permissions", error)
+      console.error("Critical error loading permissions", error)
+      toast({ variant: "destructive", title: "Error loading permissions" })
+      setPermissions([]) // Clear permissions on critical error
     } finally {
       setLoadingPermissions(false)
     }
@@ -131,8 +202,13 @@ export function ProjectSettingsDialog({ project }: ProjectSettingsDialogProps) {
       }
       const response = await createProjectPermission(reqData)
       if (response.success && response.data) {
-        setPermissions([...permissions, response.data])
-        toast({ title: "Permission added" })
+        // Enforce name from input if missing from backend
+        const newPerm = {
+          ...response.data,
+          targetName: data.targetName || response.data.targetName
+        }
+        setPermissions([...permissions, newPerm])
+        toast({ variant: "success", title: "Permission added" })
       } else {
         toast({ variant: "destructive", title: "Failed to add permission", description: response.error?.message })
       }
@@ -145,8 +221,8 @@ export function ProjectSettingsDialog({ project }: ProjectSettingsDialogProps) {
     try {
       const response = await updateProjectPermission(id, { permissionType: type })
       if (response.success && response.data) {
-        setPermissions(permissions.map(p => p.id === id ? response.data! : p))
-        toast({ title: "Permission updated" })
+        setPermissions(permissions.map(p => p.id === id ? { ...response.data!, targetName: p.targetName } : p))
+        toast({ variant: "success", title: "Permission updated" })
       }
     } catch (error) {
       toast({ variant: "destructive", title: "Failed to update permission" })
@@ -158,7 +234,7 @@ export function ProjectSettingsDialog({ project }: ProjectSettingsDialogProps) {
       const response = await deleteProjectPermission(id)
       if (response.success) {
         setPermissions(permissions.filter(p => p.id !== id))
-        toast({ title: "Permission removed" })
+        toast({ variant: "success", title: "Permission removed" })
       }
     } catch (error) {
       toast({ variant: "destructive", title: "Failed to remove permission" })
@@ -179,7 +255,7 @@ export function ProjectSettingsDialog({ project }: ProjectSettingsDialogProps) {
     // Actually, let's make it immediate if called from PermissionManager
     try {
       await toggleInheritPermissions({ projectId: project.id, enabled: newValue })
-      toast({ title: `Permission inheritance ${newValue ? 'enabled' : 'disabled'}` })
+      toast({ variant: "success", title: `Permission inheritance ${newValue ? 'enabled' : 'disabled'}` })
     } catch (e) {
       setInheritPermissions(!newValue) // Revert
       toast({ variant: "destructive", title: "Failed to toggle inheritance" })
@@ -191,7 +267,7 @@ export function ProjectSettingsDialog({ project }: ProjectSettingsDialogProps) {
     try {
       const response = await deleteProject(project.id)
       if (response.success) {
-        toast({ title: "Project deleted", description: "Redirecting..." })
+        toast({ variant: "success", title: "Project deleted", description: "Redirecting..." })
         setIsOpen(false)
         router.push("/projects") // redirect to projects list
       } else {
@@ -422,68 +498,29 @@ export function ProjectSettingsDialog({ project }: ProjectSettingsDialogProps) {
             {loadingPermissions && permissions.length === 0 ? (
               <div className="flex justify-center p-8"><RefreshCw className="animate-spin h-6 w-6" /></div>
             ) : (
-              <div onMouseEnter={() => { if (permissions.length === 0 && !loadingPermissions) loadPermissions() }}>
-                <PermissionManager
-                  permissions={permissions}
-                  inheritPermissions={inheritPermissions}
-                  onInheritToggle={handleToggleInheritPermissions}
-                  onAddPermission={handleAddPermission}
-                  onUpdatePermission={handleUpdatePermission}
-                  onRemovePermission={handleRemovePermission}
-                  resourceType="project"
-                  resourceName={project.name}
-                  // Mock data
-                  availableUsers={[
-                    { id: "user-1", name: "Alice", email: "alice@example.com" },
-                    { id: "user-2", name: "Bob", email: "bob@example.com" },
-                  ]}
-                />
-                {/* Hack: trigger load on mount/tab change isn't easy with TabsContent without effect. 
-                     We can use a dummy effect or just load on open if permissions is distinct tab. 
-                     Better: use onValueChange on Tabs. 
-                 */}
-              </div>
+              <PermissionManager
+                permissions={permissions}
+                inheritPermissions={inheritPermissions}
+                onInheritToggle={handleToggleInheritPermissions}
+                onAddPermission={handleAddPermission}
+                onUpdatePermission={handleUpdatePermission}
+                onRemovePermission={handleRemovePermission}
+                resourceType="project"
+                resourceName={project.name}
+                availableUsers={availableUsers}
+                availableGroups={availableGroups}
+                onEmailSearch={async (email: string) => {
+                  const res = await searchUserByEmail(email)
+                  return res.success && res.data ? res.data : null
+                }}
+              />
             )}
           </TabsContent>
 
           {/* Advanced Settings */}
           <TabsContent value="advanced" className="space-y-6 mt-6 flex-1 overflow-y-auto pr-2">
             <div className="space-y-6">
-              <div className="flex items-center justify-between p-4 border rounded-lg">
-                <div className="space-y-0.5">
-                  <Label htmlFor="audit-log" className="text-sm font-semibold">
-                    Enable Audit Logging
-                  </Label>
-                  <p className="text-xs text-muted-foreground">
-                    Track all changes and actions in this project for compliance and debugging
-                  </p>
-                </div>
-                <Switch
-                  id="audit-log"
-                  checked={enableAuditLog}
-                  onCheckedChange={setEnableAuditLog}
-                />
-              </div>
 
-              <Separator />
-
-              <div className="flex items-center justify-between p-4 border rounded-lg">
-                <div className="space-y-0.5">
-                  <Label htmlFor="metrics" className="text-sm font-semibold">
-                    Enable Metrics Collection
-                  </Label>
-                  <p className="text-xs text-muted-foreground">
-                    Collect usage metrics and analytics for this project
-                  </p>
-                </div>
-                <Switch
-                  id="metrics"
-                  checked={enableMetrics}
-                  onCheckedChange={setEnableMetrics}
-                />
-              </div>
-
-              <Separator />
 
               <div className="space-y-2">
                 <Label htmlFor="max-file-size" className="text-sm font-semibold">

@@ -12,6 +12,8 @@ import {
     Plus,
     Trash2,
     Edit,
+    Share2,
+    Lock,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -22,9 +24,7 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { GovernanceBadge } from "@/components/governance/governance-badge"
-import type { Folder as GovernanceFolder } from "@/lib/api-folders"
-import type { Rule } from "@/lib/api-rules"
+import type { Folder as GovernanceFolder, Rule } from "@/lib/types/governance"
 
 interface RulesTreeProps {
     folders: GovernanceFolder[]
@@ -39,6 +39,9 @@ interface RulesTreeProps {
     onDeleteFolder?: (folderId: string) => void
     onDropFiles?: (targetId: string, files: FileList) => void
     onMoveRule?: (ruleId: string, targetFolderId: string) => void
+    onViewRule?: (rule: Rule) => void
+    allowManagedFolderEditing?: boolean
+    disableInternalDnd?: boolean
 }
 
 interface TreeNode {
@@ -60,6 +63,9 @@ export function RulesTree({
     onDeleteFolder,
     onDropFiles,
     onMoveRule,
+    onViewRule,
+    allowManagedFolderEditing = false,
+    disableInternalDnd = false,
 }: RulesTreeProps) {
     const [draggedId, setDraggedId] = useState<string | null>(null)
     const [dragOverId, setDragOverId] = useState<string | null>(null)
@@ -113,10 +119,22 @@ export function RulesTree({
 
     const handleDragStart = (e: React.DragEvent, id: string, type: "folder" | "rule") => {
         e.stopPropagation()
-        // Validation: Don't drag ReadOnly folders (unless detached - handled by caller or simple check here)
+
+        // Feature Flag: If internal DnD is disabled, block drag start entirely
+        if (disableInternalDnd) {
+            e.preventDefault()
+            return
+        }
+
+        // Validation: Don't drag ReadOnly folders or shared folders UNSLESS editing is allowed
         if (type === "folder") {
             const folder = folders.find(f => f.id === id)
             if (folder?.folderStatus === "read-only") {
+                e.preventDefault()
+                return
+            }
+            // Prevent dragging shared folders (Account-level folders without projectId) UNLESS allowed
+            if (folder && folder.accountId && !folder.projectId && !allowManagedFolderEditing) {
                 e.preventDefault()
                 return
             }
@@ -130,8 +148,23 @@ export function RulesTree({
         e.preventDefault()
         e.stopPropagation()
 
+        // Verificar se é pasta compartilhada (não pode receber itens) UNLESS allowed
+        if (type === "folder") {
+            const folder = folders.find(f => f.id === id)
+            // Pastas compartilhadas: accountId presente mas projectId null
+            if (folder && folder.accountId && !folder.projectId && !allowManagedFolderEditing) {
+                e.dataTransfer.dropEffect = "none"
+                return
+            }
+        }
+
         // Case 1: Internal Drag (Reordering/Moving)
         if (draggedId) {
+            if (disableInternalDnd) {
+                e.dataTransfer.dropEffect = "none"
+                return
+            }
+
             if (draggedId === id) return
 
             // Can only drop ON folders
@@ -157,8 +190,17 @@ export function RulesTree({
         e.stopPropagation()
         setDragOverId(null)
 
+        // Verificar se o destino é uma pasta compartilhada (não pode receber itens) UNLESS allowed
+        const targetFolder = folders.find(f => f.id === targetId)
+        if (targetFolder && targetFolder.accountId && !targetFolder.projectId && !allowManagedFolderEditing) {
+            // Pasta compartilhada - não permitir drop se não permitido
+            return
+        }
+
         // Case 1: Internal Drag
         if (draggedId) {
+            if (disableInternalDnd) return // Should be blocked by dragStart/over but safety check
+
             if (draggedId === targetId) return
             const data = JSON.parse(e.dataTransfer.getData("application/json"))
             if (data.type === "folder") {
@@ -179,6 +221,7 @@ export function RulesTree({
         const isFolder = node.type === "folder"
         const isExpanded = isFolder && expandedFolders.has((node.data as GovernanceFolder).id)
         const id = (node.data as any).id
+        const isSharedFolder = isFolder && (node.data as GovernanceFolder).accountId && !(node.data as GovernanceFolder).projectId
 
         return (
             <div
@@ -226,18 +269,28 @@ export function RulesTree({
                         <span className="truncate text-sm font-medium text-foreground">{(node.data as any).name}</span>
 
                         {isFolder && (
-                            <GovernanceBadge
-                                syncStatus={(node.data as GovernanceFolder).syncStatus}
-                                folderStatus={(node.data as GovernanceFolder).folderStatus}
-                                inheritedFrom={(node.data as GovernanceFolder).inheritedFrom}
-                                sourceOfTruth={(node.data as GovernanceFolder).sourceOfTruth}
-                                size="xs"
-                            />
+                            <>
+                                {/* Badge para folders compartilhadas (Account-level folders sem projectId) */}
+                                {isSharedFolder && !allowManagedFolderEditing && (
+                                    <Badge variant="secondary" className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-700 flex items-center gap-1">
+                                        <Share2 className="h-3 w-3" />
+                                        <Lock className="h-3 w-3" />
+                                        Shared (Read-Only)
+                                    </Badge>
+                                )}
+                                {isSharedFolder && allowManagedFolderEditing && (
+                                    <Badge variant="secondary" className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border-green-300 dark:border-green-700 flex items-center gap-1">
+                                        <Share2 className="h-3 w-3" />
+                                        <Edit className="h-3 w-3" />
+                                        Shared (Managed)
+                                    </Badge>
+                                )}
+                            </>
                         )}
                     </div>
 
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {isFolder && (
+                        {isFolder && (!isSharedFolder || allowManagedFolderEditing) && (
                             <Button
                                 variant="ghost"
                                 size="icon"
@@ -262,23 +315,63 @@ export function RulesTree({
                                 {isFolder ? (
                                     <>
                                         {/* Folder Actions */}
-                                        <DropdownMenuItem onClick={() => onEditFolder?.(node.data as GovernanceFolder)}>
-                                            <Edit className="mr-2 h-4 w-4" /> Edit
-                                        </DropdownMenuItem>
-                                        {/* Separator, Detach/Sync logic could go here */}
-                                        <DropdownMenuItem className="text-destructive" onClick={() => onDeleteFolder?.(id)}>
-                                            <Trash2 className="mr-2 h-4 w-4" /> Delete
-                                        </DropdownMenuItem>
+                                        {/* Verificar se é folder compartilhada (Account-level sem projectId) */}
+                                        {isSharedFolder && !allowManagedFolderEditing ? (
+                                            <>
+                                                <DropdownMenuItem disabled className="text-muted-foreground">
+                                                    <Lock className="mr-2 h-4 w-4" /> Read-Only (Shared Folder)
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem disabled className="text-muted-foreground">
+                                                    <Trash2 className="mr-2 h-4 w-4" /> Cannot Delete (Shared)
+                                                </DropdownMenuItem>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <DropdownMenuItem onClick={() => onEditFolder?.(node.data as GovernanceFolder)}>
+                                                    <Edit className="mr-2 h-4 w-4" /> Edit
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem className="text-destructive" onClick={() => onDeleteFolder?.(id)}>
+                                                    <Trash2 className="mr-2 h-4 w-4" /> Delete
+                                                </DropdownMenuItem>
+                                            </>
+                                        )}
                                     </>
                                 ) : (
                                     <>
                                         {/* Rule Actions */}
-                                        <DropdownMenuItem onClick={() => onEditRule(node.data as Rule)}>
-                                            <Edit className="mr-2 h-4 w-4" /> Edit
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem className="text-destructive" onClick={() => onDeleteRule(id)}>
-                                            <Trash2 className="mr-2 h-4 w-4" /> Delete
-                                        </DropdownMenuItem>
+                                        {/* Check if rule is in a shared folder (read-only context) */}
+                                        {(() => {
+                                            const rule = node.data as Rule
+                                            const parentFolder = rule.folderId ? folders.find(f => f.id === rule.folderId) : null
+                                            const isRuleInSharedFolder = parentFolder && parentFolder.accountId && !parentFolder.projectId
+                                            // Also check if rule itself is account-level (no projectId)
+                                            const isAccountRule = rule.accountId && !rule.projectId
+
+                                            // If in shared folder OR is account rule, AND editing is not explicitly allowed
+                                            if ((isRuleInSharedFolder || isAccountRule) && !allowManagedFolderEditing) {
+                                                return (
+                                                    <>
+                                                        <DropdownMenuItem onClick={() => onViewRule?.(node.data as Rule)}>
+                                                            <FileText className="mr-2 h-4 w-4" /> View Content
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuItem disabled className="text-muted-foreground opacity-75">
+                                                            <Lock className="mr-2 h-4 w-4" /> Shared (Read-Only)
+                                                        </DropdownMenuItem>
+                                                    </>
+                                                )
+                                            }
+
+                                            return (
+                                                <>
+                                                    <DropdownMenuItem onClick={() => onEditRule(node.data as Rule)}>
+                                                        <Edit className="mr-2 h-4 w-4" /> Edit
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuItem className="text-destructive" onClick={() => onDeleteRule(id)}>
+                                                        <Trash2 className="mr-2 h-4 w-4" /> Delete
+                                                    </DropdownMenuItem>
+                                                </>
+                                            )
+                                        })()}
                                     </>
                                 )}
                             </DropdownMenuContent>

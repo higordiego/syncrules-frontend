@@ -17,63 +17,26 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { FolderKanban, Sparkles, ArrowRight } from "lucide-react"
+import { useAccount } from "@/context/AccountContext"
 import { useAccountActions } from "@/lib/actions/account-actions"
-import { getCurrentAccountId } from "@/components/accounts/account-selector"
 import { setCurrentProjectId, setDefaultProjectId } from "@/components/projects/project-selector"
 import { addUserProject } from "@/components/projects/project-requirement-check"
 import { listAccounts } from "@/lib/api-accounts"
-import type { InheritanceMode, Project } from "@/lib/types/governance"
+import type { Project } from "@/lib/types/governance"
 
 export default function CreateProjectOnboardingPage() {
   const router = useRouter()
   const { createProject } = useAccountActions()
+  const { selectedAccountId: accountId, isLoading: isLoadingAccount } = useAccount()
   const [projectName, setProjectName] = useState("")
   const [projectDescription, setProjectDescription] = useState("")
-  const [inheritanceMode, setInheritanceMode] = useState<InheritanceMode>("full")
   const [isCreating, setIsCreating] = useState(false)
-  const [accountId, setAccountId] = useState<string | null>(null)
-  const [isLoadingAccount, setIsLoadingAccount] = useState(true)
-
-  // Buscar account atual da API
+  // As organizações já são carregadas pelo AccountContext
   useEffect(() => {
-    const fetchAccount = async () => {
-      setIsLoadingAccount(true)
-      try {
-        // Primeiro tentar pegar do localStorage
-        const currentAccountId = getCurrentAccountId()
-        if (currentAccountId) {
-          setAccountId(currentAccountId)
-          setIsLoadingAccount(false)
-          return
-        }
-
-        // Se não tiver, buscar da API e usar o primeiro
-        const response = await listAccounts()
-        if (response.success && response.data && response.data.length > 0) {
-          const firstAccount = response.data[0]
-          setAccountId(firstAccount.id)
-          // Salvar como account atual
-          if (typeof window !== "undefined") {
-            localStorage.setItem("syncrules_current_account", firstAccount.id)
-            localStorage.setItem("syncrules_default_account", firstAccount.id)
-          }
-        } else {
-          // Se não houver organizações, redirecionar para criar uma
-          router.push("/onboarding/select-account")
-          return
-        }
-      } catch (error) {
-        console.error("Failed to fetch account:", error)
-        // Se houver erro, redirecionar para criar organização
-        router.push("/onboarding/select-account")
-        return
-      } finally {
-        setIsLoadingAccount(false)
-      }
+    if (!isLoadingAccount && !accountId) {
+      router.push("/onboarding/select-account")
     }
-
-    fetchAccount()
-  }, [])
+  }, [isLoadingAccount, accountId, router])
 
   const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -82,10 +45,8 @@ export default function CreateProjectOnboardingPage() {
     setIsCreating(true)
     try {
       await createProject({
-        accountId,
         name: projectName.trim(),
         description: projectDescription.trim() || undefined,
-        inheritanceMode,
         onSuccess: async (projectId: string) => {
           // Buscar projeto criado da API para obter dados completos
           // Por enquanto, criar objeto básico
@@ -94,7 +55,6 @@ export default function CreateProjectOnboardingPage() {
             accountId,
             name: projectName.trim(),
             description: projectDescription.trim() || undefined,
-            inheritanceMode,
             permissions: [],
             inheritPermissions: false,
             folders: [],
@@ -103,17 +63,17 @@ export default function CreateProjectOnboardingPage() {
             updatedAt: new Date().toISOString(),
             slug: projectName.trim().toLowerCase().replace(/\s+/g, "-"),
           }
-          
+
           // Adicionar projeto à lista de projetos do usuário
           addUserProject(newProject)
-          
+
           // Definir como projeto atual e padrão
           setCurrentProjectId(projectId)
           setDefaultProjectId(projectId)
-          
+
           // Aguardar um pouco para garantir que tudo foi salvo
           await new Promise((resolve) => setTimeout(resolve, 300))
-          
+
           // Redirecionar para o projeto criado
           router.push(`/account/projects/${projectId}`)
         },
@@ -176,51 +136,6 @@ export default function CreateProjectOnboardingPage() {
                   <p className="text-xs text-muted-foreground">
                     Optional: Add context about what this project is for
                   </p>
-                </div>
-
-                <div className="space-y-3">
-                  <Label htmlFor="inheritance-mode" className="text-sm font-semibold">
-                    Inheritance Mode *
-                  </Label>
-                  <Select
-                    value={inheritanceMode}
-                    onValueChange={(value) => setInheritanceMode(value as InheritanceMode)}
-                  >
-                    <SelectTrigger className="h-auto min-h-[3.5rem] py-3 text-base">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="p-2">
-                      <SelectItem value="full" className="px-3 py-4 rounded-lg">
-                        <div className="flex flex-col gap-1.5">
-                          <span className="font-semibold text-base leading-tight">Full Inheritance</span>
-                          <span className="text-sm text-muted-foreground leading-relaxed">
-                            All Account folders and rules are automatically synced to this project
-                          </span>
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="partial" className="px-3 py-4 rounded-lg">
-                        <div className="flex flex-col gap-1.5">
-                          <span className="font-semibold text-base leading-tight">Partial Inheritance</span>
-                          <span className="text-sm text-muted-foreground leading-relaxed">
-                            Choose which folders and rules to sync from Account
-                          </span>
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="none" className="px-3 py-4 rounded-lg">
-                        <div className="flex flex-col gap-1.5">
-                          <span className="font-semibold text-base leading-tight">No Inheritance</span>
-                          <span className="text-sm text-muted-foreground leading-relaxed">
-                            All folders and rules are local to this project only
-                          </span>
-                        </div>
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <div className="p-3 bg-muted/50 rounded-lg border">
-                    <p className="text-xs text-muted-foreground leading-relaxed">
-                      <strong className="text-foreground">Note:</strong> You can change this later in project settings.
-                    </p>
-                  </div>
                 </div>
 
                 <div className="flex items-center gap-3 p-4 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">

@@ -4,8 +4,7 @@ import { useEffect, useState } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import { listProjects } from "@/lib/api-projects"
 import { mockProjects } from "@/lib/mock-data/governance"
-import { getCurrentAccountId } from "@/components/accounts/account-selector"
-import type { Project } from "@/lib/types/governance"
+import { Project } from "@/lib/types/governance"
 
 const ONBOARDING_PATH = "/onboarding/create-project"
 const ALLOWED_PATHS_WITHOUT_PROJECT = [
@@ -23,7 +22,7 @@ const USER_PROJECTS_STORAGE_KEY = "syncrules_user_projects"
  */
 export function getUserProjects(): Project[] {
   if (typeof window === "undefined") return []
-  
+
   // Verificar se há projetos salvos no localStorage
   const stored = localStorage.getItem(USER_PROJECTS_STORAGE_KEY)
   if (stored) {
@@ -33,7 +32,7 @@ export function getUserProjects(): Project[] {
       return []
     }
   }
-  
+
   // Por padrão, retornar mockProjects (em produção viria da API)
   return mockProjects
 }
@@ -72,24 +71,20 @@ export function ProjectRequirementCheck({ children }: { children: React.ReactNod
         return
       }
 
-      // Tentar buscar projetos da API para atualizar localStorage (opcional)
-      const currentAccountId = getCurrentAccountId()
-      if (currentAccountId) {
-        try {
-          const response = await listProjects(currentAccountId)
-          if (response.success && response.data && Array.isArray(response.data)) {
-            // Salvar projetos da API no localStorage
-            if (response.data.length > 0) {
-              saveUserProjects(response.data)
-            }
+      try {
+        const response = await listProjects()
+        if (response.success && response.data && Array.isArray(response.data)) {
+          // Salvar projetos da API no localStorage
+          if (response.data.length > 0) {
+            saveUserProjects(response.data)
           }
-        } catch (apiError) {
-          // Se API falhar, continuar normalmente
-          console.warn("API call failed, continuing without projects:", apiError)
         }
+      } catch (apiError) {
+        // Se API falhar, continuar normalmente
+        console.warn("API call failed, continuing without projects:", apiError)
+      } finally {
+        setIsChecking(false)
       }
-      
-      setIsChecking(false)
     }
 
     checkProjects()

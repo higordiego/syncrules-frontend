@@ -8,10 +8,8 @@ import { useRouter } from "next/navigation"
 import { createProject as createProjectAPI, type CreateProjectData } from "@/lib/api-projects"
 
 interface CreateProjectParams {
-  accountId: string
   name: string
   description?: string
-  inheritanceMode: "full" | "partial" | "none"
   onSuccess?: (projectId: string) => void
 }
 
@@ -28,10 +26,8 @@ export function useAccountActions() {
    * - Redirecionar para página do projeto
    */
   const createProject = async ({
-    accountId,
     name,
     description,
-    inheritanceMode,
     onSuccess,
   }: CreateProjectParams) => {
     try {
@@ -50,10 +46,8 @@ export function useAccountActions() {
 
       // Criar projeto via API
       const response = await createProjectAPI({
-        accountId,
         name: name.trim(),
         description: description?.trim(),
-        inheritanceMode,
       })
 
       if (!response.success || !response.data) {
@@ -63,6 +57,7 @@ export function useAccountActions() {
       const project = response.data
 
       toast({
+        variant: "success",
         title: "Project Created",
         description: `Project "${name}" created successfully.`,
       })

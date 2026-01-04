@@ -95,20 +95,20 @@ export function InsightsPanel({ projects, metrics, folders }: InsightsPanelProps
     })
   }
 
-  // 4. Verificar projetos com herança mas sem sync
-  const projectsWithInheritanceButNoSync = projects.filter(
-    (p) => (p.inheritanceMode === "full" || p.inheritanceMode === "partial") && p.folders.length === 0
+  // 4. Verificar projetos sem folders
+  const projectsWithoutFolders = projects.filter(
+    (p) => p.folders.length === 0
   )
 
-  if (projectsWithInheritanceButNoSync.length > 0) {
+  if (projectsWithoutFolders.length > 0) {
     insights.push({
-      id: "inheritance-no-sync",
+      id: "projects-no-folders",
       type: "info",
-      title: "Inheritance Configured But No Synced Folders",
-      description: `Some projects are configured to inherit but don't have synced folders yet. Sync folders from Account to enable inheritance.`,
+      title: "Projects without folders",
+      description: `Some projects don't have folders yet. Create folders to organize your rules.`,
       action: {
-        label: "Configure Sync",
-        href: `/account/projects/${projectsWithInheritanceButNoSync[0]?.id}`,
+        label: "View Projects",
+        href: `/account/projects/${projectsWithoutFolders[0]?.id}`,
       },
       icon: RefreshCw,
       priority: "medium",

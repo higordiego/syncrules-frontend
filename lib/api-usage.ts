@@ -19,14 +19,14 @@ export interface UsageHistory {
 }
 
 /**
- * Obtém estatísticas de uso do usuário
+ * Obtém estatísticas de uso (X-Account-Id header injetado automaticamente)
  */
 export async function getUsageStats(): Promise<ApiResponse<UsageStats>> {
   return request<UsageStats>("/usage/stats")
 }
 
 /**
- * Obtém limites do plano do usuário
+ * Obtém limites de uso
  */
 export async function getUsageLimits(): Promise<ApiResponse<UsageStats>> {
   return request<UsageStats>("/usage/limits")
@@ -43,4 +43,3 @@ export async function getUsageHistory(params?: {
 
   return request<UsageHistory[]>(`/usage/history?${queryParams.toString()}`)
 }
-

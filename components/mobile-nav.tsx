@@ -14,22 +14,44 @@ import {
   History,
   Users,
   X,
+  LayoutDashboard,
+  GitBranch,
+  Plug,
+  Shield,
+  CreditCard,
 } from "lucide-react"
 import { Logo } from "./logo"
 import { getUserSync } from "@/lib/auth"
+import { useAccount } from "@/context/AccountContext"
+import { Badge } from "@/components/ui/badge"
 
 const navigation = [
-  { name: "Account", href: "/account", icon: Building2 },
-  { name: "Groups", href: "/account/groups", icon: Users },
+  { name: "Overview", href: "/account", icon: LayoutDashboard },
+  { name: "Versioning", href: "/dashboard/versioning", icon: GitBranch, requiresPro: true },
+  { name: "Teams", href: "/account/groups", icon: Users, requiresPro: true },
+  { name: "Integrations", href: "/dashboard/integrations", icon: Plug },
+  { name: "Audit Logs", href: "/dashboard/audit", icon: Shield, requiresEnterprise: true },
+  { name: "Billing", href: "/plans", icon: CreditCard },
   { name: "MCP Keys", href: "/mcp-keys", icon: Key },
-  { name: "Metrics", href: "/account/metrics", icon: BarChart3 },
-  { name: "Audit", href: "/account/audit", icon: History },
+  { name: "Activity & Usage", href: "/activity", icon: BarChart3 },
+  { name: "Organizations", href: "/account/organizations", icon: Building2 },
 ]
 
 export function MobileNav() {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
   const user = getUserSync()
+  const { selectedAccount } = useAccount()
+  const plan = selectedAccount?.plan || "freemium"
+  
+  const isPlanPro = plan === "pro" || plan === "enterprise"
+  const isPlanEnterprise = plan === "enterprise"
+  
+  const isItemAccessible = (item: { requiresPro?: boolean; requiresEnterprise?: boolean }) => {
+    if (item.requiresEnterprise && !isPlanEnterprise) return false
+    if (item.requiresPro && !isPlanPro) return false
+    return true
+  }
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -75,16 +97,14 @@ export function MobileNav() {
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto px-4 py-6 space-y-1">
           {navigation.map((item) => {
-            // Lógica melhorada para determinar link ativo
-            let isActive = false
+            if (!isItemAccessible(item)) return null
             
+            let isActive = false
             if (item.href === "/account") {
               isActive = pathname === "/account" || 
                 (pathname?.startsWith("/account/") && 
                  !pathname?.startsWith("/account/groups") &&
-                 !pathname?.startsWith("/account/metrics") &&
-                 !pathname?.startsWith("/account/audit") &&
-                 !pathname?.startsWith("/account/projects"))
+                 !pathname?.startsWith("/account/organizations"))
             } else {
               isActive = pathname === item.href || pathname?.startsWith(item.href + "/")
             }
@@ -106,7 +126,17 @@ export function MobileNav() {
                   "h-5 w-5 flex-shrink-0",
                   isActive ? "text-primary-foreground" : "text-muted-foreground"
                 )} />
-                <span>{item.name}</span>
+                <span className="flex-1">{item.name}</span>
+                {item.requiresPro && !isPlanPro && (
+                  <Badge variant="outline" className="text-xs">
+                    Pro
+                  </Badge>
+                )}
+                {item.requiresEnterprise && !isPlanEnterprise && (
+                  <Badge variant="outline" className="text-xs">
+                    Enterprise
+                  </Badge>
+                )}
               </Link>
             )
           })}

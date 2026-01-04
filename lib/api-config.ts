@@ -1,5 +1,7 @@
 "use client"
 
+import { getStoredAccountId } from "./api"
+
 /**
  * API Configuration - Funções auxiliares para requisições HTTP autenticadas
  */
@@ -90,6 +92,34 @@ export async function fetchWithAuth(
   // Adiciona token Bearer se disponível
   if (token) {
     headers["Authorization"] = `Bearer ${token}`
+  }
+
+  // ENFORCEMENT: Injeta X-Account-Id header
+  const accountId = getStoredAccountId()
+  const isGlobalRoute =
+    endpoint.startsWith("/auth") ||
+    endpoint.startsWith("/metrics") ||
+    endpoint.startsWith("/health") ||
+    endpoint.startsWith("/accounts") ||
+    endpoint.startsWith("/users") ||
+    endpoint.startsWith("/invites")
+
+  if (accountId) {
+    headers["X-Account-Id"] = accountId
+  } else if (!isGlobalRoute) {
+    // Bloquear requisições sem contexto de conta em rotas protegidas
+    console.warn(`Blocking fetchWithAuth request to ${endpoint} because no account ID is set.`)
+    // Criar uma Response fake para indicar erro de contexto
+    return new Response(JSON.stringify({
+      success: false,
+      error: {
+        code: "NO_ACCOUNT_CONTEXT",
+        message: "No organization selected. Please select an organization to continue."
+      }
+    }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" }
+    })
   }
 
   try {

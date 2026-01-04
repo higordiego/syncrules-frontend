@@ -1,11 +1,11 @@
 "use client"
 
 import { request, type ApiResponse } from "./api"
-import type { Folder, SyncStatus, FolderStatus } from "./types/governance"
+import type { Folder, FolderStatus } from "./types/governance"
 
 export interface CreateFolderData {
-  accountId?: string
   projectId?: string
+  parentFolderId?: string
   name: string
   path: string
   inheritPermissions?: boolean
@@ -17,11 +17,10 @@ export interface MoveFolderData {
 }
 
 /**
- * Lista pastas por conta ou projeto
+ * Lista pastas por projeto (X-Account-Id injetado automaticamente)
  */
-export async function listFolders(params: { accountId?: string; projectId?: string }): Promise<ApiResponse<Folder[]>> {
+export async function listFolders(params: { projectId?: string } = {}): Promise<ApiResponse<Folder[]>> {
   const query = new URLSearchParams()
-  if (params.accountId) query.append("accountId", params.accountId)
   if (params.projectId) query.append("projectId", params.projectId)
 
   return request<Folder[]>(`/folders?${query.toString()}`)
@@ -41,34 +40,6 @@ export async function createFolder(data: CreateFolderData): Promise<ApiResponse<
   return request<Folder>("/folders", {
     method: "POST",
     body: JSON.stringify(data),
-  })
-}
-
-/**
- * Sincroniza uma pasta da conta para um projeto
- */
-export async function syncFolder(id: string, projectId: string): Promise<ApiResponse<Folder>> {
-  return request<Folder>(`/folders/${id}/sync`, {
-    method: "POST",
-    body: JSON.stringify({ projectId }),
-  })
-}
-
-/**
- * Desvincula uma pasta sincronizada (torna local)
- */
-export async function detachFolder(id: string): Promise<ApiResponse<void>> {
-  return request<void>(`/folders/${id}/detach`, {
-    method: "POST",
-  })
-}
-
-/**
- * Re-sincroniza uma pasta desvinculada
- */
-export async function resyncFolder(id: string): Promise<ApiResponse<void>> {
-  return request<void>(`/folders/${id}/resync`, {
-    method: "POST",
   })
 }
 
@@ -99,4 +70,30 @@ export async function deleteFolder(id: string): Promise<ApiResponse<void>> {
   return request<void>(`/folders/${id}`, {
     method: "DELETE",
   })
+}
+
+/**
+ * Compartilha uma pasta com projetos específicos
+ */
+export async function shareFolderWithProjects(folderId: string, projectIds: string[]): Promise<ApiResponse<void>> {
+  return request<void>(`/folders/${folderId}/share`, {
+    method: "POST",
+    body: JSON.stringify({ projectIds }),
+  })
+}
+
+/**
+ * Remove compartilhamento de uma pasta com um projeto
+ */
+export async function unshareFolderFromProject(folderId: string, projectId: string): Promise<ApiResponse<void>> {
+  return request<void>(`/folders/${folderId}/share/${projectId}`, {
+    method: "DELETE",
+  })
+}
+
+/**
+ * Obtém lista de projetos que têm acesso a uma pasta
+ */
+export async function getSharedProjects(folderId: string): Promise<ApiResponse<string[]>> {
+  return request<string[]>(`/folders/${folderId}/shared-projects`)
 }

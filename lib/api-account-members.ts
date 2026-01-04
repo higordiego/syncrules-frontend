@@ -23,58 +23,61 @@ export interface UpdateMemberRoleData {
 }
 
 /**
- * Lista todos os membros de uma organização
+ * Lista todos os membros da organização atual
+ * Se accountId for fornecido, usa /accounts/{id}/members
+ * Caso contrário, usa /members que obtém o account ID do X-Account-Id header
  */
-export async function listAccountMembers(accountId: string): Promise<ApiResponse<AccountMember[]>> {
-  return request<AccountMember[]>(`/accounts/${accountId}/members`)
+export async function listAccountMembers(accountId?: string): Promise<ApiResponse<AccountMember[]>> {
+  // Se accountId for fornecido, usar na URL
+  if (accountId) {
+    return request<AccountMember[]>(`/accounts/${accountId}/members`)
+  }
+  // Caso contrário, usar endpoint que obtém do contexto (X-Account-Id header)
+  return request<AccountMember[]>("/members")
 }
 
 /**
- * Adiciona um membro à organização
+ * Adiciona um membro à organização atual
  */
 export async function addAccountMember(
-  accountId: string,
   data: AddMemberData
 ): Promise<ApiResponse<void>> {
-  return request<void>(`/accounts/${accountId}/members`, {
+  return request<void>("/members", {
     method: "POST",
     body: JSON.stringify(data),
   })
 }
 
 /**
- * Remove um membro da organização
+ * Remove um membro da organização atual
  */
 export async function removeAccountMember(
-  accountId: string,
   userId: string
 ): Promise<ApiResponse<void>> {
-  return request<void>(`/accounts/${accountId}/members/${userId}`, {
+  return request<void>(`/members/${userId}`, {
     method: "DELETE",
   })
 }
 
 /**
- * Atualiza o role de um membro
+ * Atualiza o role de um membro na organização atual
  */
 export async function updateAccountMemberRole(
-  accountId: string,
   userId: string,
   data: UpdateMemberRoleData
 ): Promise<ApiResponse<void>> {
-  return request<void>(`/accounts/${accountId}/members/${userId}/role`, {
+  return request<void>(`/members/${userId}/role`, {
     method: "PUT",
     body: JSON.stringify(data),
   })
 }
 
 /**
- * Busca membros da organização por email (busca parcial)
+ * Busca membros da organização atual por email (busca parcial)
  */
 export async function searchAccountMembers(
-  accountId: string,
   emailQuery: string
 ): Promise<ApiResponse<AccountMember[]>> {
-  return request<AccountMember[]>(`/accounts/${accountId}/members/search?email=${encodeURIComponent(emailQuery)}`)
+  return request<AccountMember[]>(`/members/search?email=${encodeURIComponent(emailQuery)}`)
 }
 

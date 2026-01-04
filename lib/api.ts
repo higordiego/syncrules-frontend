@@ -11,6 +11,24 @@ const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "7966508922
 // Storage keys
 const TOKEN_KEY = "syncrules_token"
 const REFRESH_TOKEN_KEY = "syncrules_refresh_token"
+const ACCOUNT_STORAGE_KEY = "syncrules_current_account"
+
+let globalAccountId: string | null = null
+
+/**
+ * Define o ID da organização global para todas as requisições
+ */
+export function setGlobalAccountId(accountId: string | null) {
+  globalAccountId = accountId
+}
+
+/**
+ * Obtém o ID da organização atual do local storage (fallback)
+ */
+export function getStoredAccountId(): string | null {
+  if (typeof window === "undefined") return null
+  return localStorage.getItem(ACCOUNT_STORAGE_KEY)
+}
 
 export interface ApiResponse<T> {
   success: boolean
@@ -92,9 +110,33 @@ export async function request<T>(
     ...(options.headers as Record<string, string>),
   }
 
-  // Adiciona token Bearer se disponível e não fornecido nas opções
+  // Inject common headers
   if (token && !headers["Authorization"]) {
     headers["Authorization"] = `Bearer ${token}`
+  }
+
+  // Inject X-Account-Id header
+  const accountId = globalAccountId || getStoredAccountId()
+  const isGlobalRoute =
+    endpoint.startsWith("/auth") ||
+    endpoint.startsWith("/metrics") ||
+    endpoint.startsWith("/health") ||
+    endpoint.startsWith("/accounts") ||
+    endpoint.startsWith("/users") ||
+    endpoint.startsWith("/invites")
+
+  if (accountId) {
+    headers["X-Account-Id"] = accountId
+  } else if (!isGlobalRoute) {
+    // Block requests without account-id on non-auth routes
+    console.warn(`Blocking request to ${endpoint} because no account ID is set.`)
+    return {
+      success: false,
+      error: {
+        code: "NO_ACCOUNT_CONTEXT",
+        message: "No organization selected. Please select an organization to continue.",
+      },
+    }
   }
 
   try {
@@ -133,17 +175,40 @@ export async function request<T>(
     return handleResponse<T>(response)
   } catch (error) {
     // Log detalhado do erro para debug
-    if (error instanceof TypeError && error.message.includes("fetch")) {
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    const isNetworkError = 
+      error instanceof TypeError && 
+      (errorMessage.includes("fetch") || 
+       errorMessage.includes("Failed to fetch") ||
+       errorMessage.includes("NetworkError") ||
+       errorMessage.includes("Network request failed"))
+
+    if (isNetworkError) {
       console.error("Erro de rede ao conectar com o backend:", {
         url,
-        error: error.message,
+        error: errorMessage,
         backendUrl: API_BASE_URL,
+        errorType: error instanceof Error ? error.constructor.name : typeof error,
+        stack: error instanceof Error ? error.stack : undefined,
       })
+      
+      // Verificar se é um erro de CORS
+      const isCorsError = errorMessage.includes("CORS") || 
+                         errorMessage.includes("Access-Control") ||
+                         errorMessage.includes("blocked by CORS")
+      
       return {
         success: false,
         error: {
-          code: "NETWORK_ERROR",
-          message: `Não foi possível conectar ao backend. Verifique se o servidor está rodando em ${API_BASE_URL}`,
+          code: isCorsError ? "CORS_ERROR" : "NETWORK_ERROR",
+          message: isCorsError
+            ? `Erro de CORS ao conectar com o backend. Verifique se o servidor em ${API_BASE_URL} está configurado para aceitar requisições do frontend.`
+            : `Não foi possível conectar ao backend em ${API_BASE_URL}. Verifique se o servidor está rodando e acessível.`,
+          details: {
+            url,
+            backendUrl: API_BASE_URL,
+            errorMessage,
+          },
         },
       }
     }
@@ -152,7 +217,11 @@ export async function request<T>(
       success: false,
       error: {
         code: "NETWORK_ERROR",
-        message: error instanceof Error ? error.message : "Erro de rede",
+        message: errorMessage || "Erro de rede desconhecido",
+        details: {
+          url,
+          errorMessage,
+        },
       },
     }
   }
@@ -297,5 +366,6 @@ export const api = {
   getRefreshToken,
   clearTokens,
   isAuthenticated,
+  setGlobalAccountId,
 }
 

@@ -42,11 +42,7 @@ import {
 import { getAuditLogs, type AuditLog, type AuditLogsResponse } from "@/lib/api-audit"
 import { useToast } from "@/components/ui/use-toast"
 
-interface AuditDashboardProps {
-  accountId?: string // Optional, as we filter by user mostly, but can be used for context if needed
-}
-
-export function AuditDashboard({ accountId }: AuditDashboardProps) {
+export function AuditDashboard() {
   const { toast } = useToast()
   const [logs, setLogs] = useState<AuditLog[]>([])
   const [loading, setLoading] = useState(true)

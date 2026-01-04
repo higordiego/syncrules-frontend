@@ -5,7 +5,6 @@ import type { Rule } from "./types/governance"
 
 export interface CreateRuleData {
   folderId?: string
-  accountId?: string
   projectId?: string
   name: string
   content: string
@@ -19,7 +18,7 @@ export interface UpdateRuleData {
 }
 
 /**
- * Lista todas as regras de uma pasta
+ * Lista todas as regras de uma pasta (X-Account-Id header injetado automaticamente)
  */
 export async function listRulesByFolder(folderId: string): Promise<ApiResponse<Rule[]>> {
   return request<Rule[]>(`/rules?folderId=${folderId}`)
@@ -35,8 +34,8 @@ export async function listRulesByProject(projectId: string): Promise<ApiResponse
 /**
  * Lista todas as regras de uma organização
  */
-export async function listRulesByAccount(accountId: string): Promise<ApiResponse<Rule[]>> {
-  return request<Rule[]>(`/rules?accountId=${accountId}`)
+export async function listRulesByAccount(): Promise<ApiResponse<Rule[]>> {
+  return request<Rule[]>("/rules")
 }
 
 /**
@@ -76,7 +75,7 @@ export async function deleteRule(id: string): Promise<ApiResponse<void>> {
 }
 
 /**
- * Upload de arquivos de regras
+ * Upload de regras
  */
 export async function uploadRules(folderId: string, files: File[]): Promise<ApiResponse<Rule[]>> {
   const formData = new FormData()
@@ -92,9 +91,8 @@ export async function uploadRules(folderId: string, files: File[]): Promise<ApiR
   })
 }
 
-
 /**
- * Move uma regra para outra pasta
+ * Move uma regra
  */
 export async function moveRule(
   ruleId: string,
@@ -103,7 +101,8 @@ export async function moveRule(
   return request<void>(`/rules/${ruleId}/move`, {
     method: "POST",
     body: JSON.stringify({
-      folderId: newFolderId,
+      folderId: newFolderId || null,
+      displayOrder: 0, // Append ao final
     }),
   })
 }

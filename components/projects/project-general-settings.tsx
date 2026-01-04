@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -16,9 +16,10 @@ import { Separator } from "@/components/ui/separator"
 
 interface ProjectGeneralSettingsProps {
   project: Project
+  onUpdate?: (updatedProject: Project) => void
 }
 
-export function ProjectGeneralSettings({ project }: ProjectGeneralSettingsProps) {
+export function ProjectGeneralSettings({ project, onUpdate }: ProjectGeneralSettingsProps) {
   const router = useRouter()
   const { toast } = useToast()
   const [isSaving, setIsSaving] = useState(false)
@@ -31,21 +32,41 @@ export function ProjectGeneralSettings({ project }: ProjectGeneralSettingsProps)
 
   const { confirm, ConfirmDialog } = useConfirm()
 
+  // Sincronizar estado local quando a prop project mudar
+  useEffect(() => {
+    setProjectName(project.name)
+    setProjectDescription(project.description || "")
+    setProjectSlug(project.slug)
+  }, [project.name, project.description, project.slug])
+
   const handleSaveGeneral = async () => {
     setIsSaving(true)
     try {
       const response = await updateProject(project.id, {
         name: projectName,
         description: projectDescription,
-        slug: projectSlug,
-        // Inheritance mode is handled in its own tab, so we preserve the current one if not sending it,
-        // but the API might expect partial updates. Assuming updateProject handles partials.
-        // If not, pass current inheritanceMode.
-        inheritanceMode: project.inheritanceMode,
       })
 
-      if (response.success) {
+      if (response.success && response.data) {
+        // Atualizar o projeto local com os dados retornados da API
+        const updatedProject: Project = {
+          id: response.data.id,
+          accountId: response.data.accountId,
+          name: response.data.name,
+          slug: response.data.slug,
+          description: response.data.description,
+          permissions: project.permissions || [],
+          folders: project.folders || [],
+          rules: project.rules || [],
+          createdAt: response.data.createdAt,
+          updatedAt: response.data.updatedAt,
+        }
+        
+        // Notificar o componente pai sobre a atualização
+        onUpdate?.(updatedProject)
+        
         toast({
+          variant: "success",
           title: "Settings saved",
           description: "Project settings have been updated successfully.",
         })
@@ -98,8 +119,7 @@ export function ProjectGeneralSettings({ project }: ProjectGeneralSettingsProps)
 
   const hasChanges =
     projectName !== project.name ||
-    projectDescription !== (project.description || "") ||
-    projectSlug !== project.slug
+    projectDescription !== (project.description || "")
 
   return (
     <div className="space-y-6">
@@ -125,11 +145,11 @@ export function ProjectGeneralSettings({ project }: ProjectGeneralSettingsProps)
             <Input
               id="projectSlug"
               value={projectSlug}
-              onChange={(e) => setProjectSlug(e.target.value)}
-              placeholder="my-project"
+              disabled
+              className="bg-muted text-muted-foreground cursor-not-allowed"
             />
             <p className="text-xs text-muted-foreground">
-              URL-friendly name for your project
+              URL-friendly name for your project (Read-Only)
             </p>
           </div>
           <div className="space-y-2">

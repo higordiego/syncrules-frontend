@@ -8,7 +8,6 @@ import {
   FolderKanban,
   Folder,
   FileText,
-  GitBranch,
   Plus,
   Edit,
   Trash2,
@@ -32,11 +31,6 @@ export function AuditTimeline({ logs, projectId }: AuditTimelineProps) {
       case "project.deleted":
       case "rule.deleted":
         return Trash2
-      case "folder.synced":
-      case "folder.detached":
-        return GitBranch
-      case "inheritance.changed":
-        return FolderKanban
       default:
         return FileText
     }
@@ -46,7 +40,6 @@ export function AuditTimeline({ logs, projectId }: AuditTimelineProps) {
     if (action.includes("deleted")) return "text-red-500"
     if (action.includes("created")) return "text-green-500"
     if (action.includes("updated")) return "text-blue-500"
-    if (action.includes("synced") || action.includes("detached")) return "text-yellow-500"
     return "text-gray-500"
   }
 
@@ -55,12 +48,9 @@ export function AuditTimeline({ logs, projectId }: AuditTimelineProps) {
       "project.created": "Project Created",
       "project.updated": "Project Updated",
       "project.deleted": "Project Deleted",
-      "folder.synced": "Folder Synced",
-      "folder.detached": "Folder Detached",
       "rule.created": "Rule Created",
       "rule.updated": "Rule Updated",
       "rule.deleted": "Rule Deleted",
-      "inheritance.changed": "Inheritance Changed",
     }
     return labels[action] || action
   }

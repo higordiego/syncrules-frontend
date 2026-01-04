@@ -18,7 +18,7 @@ export interface ActivityStats {
 }
 
 /**
- * Lista atividades do usuário
+ * Lista atividades do usuário (X-Account-Id header injetado automaticamente)
  */
 export async function listActivities(params?: {
   page?: number
@@ -53,4 +53,3 @@ export async function getActivityHistory(params?: {
 
   return request<Activity[]>(`/activities/history?${queryParams.toString()}`)
 }
-

@@ -38,17 +38,17 @@ export interface AddGroupMemberData {
 }
 
 /**
- * Lista todos os grupos de uma organização
+ * Lista todos os grupos da organização atual
  */
-export async function listGroups(accountId: string): Promise<ApiResponse<Group[]>> {
-  return request<Group[]>(`/accounts/${accountId}/groups`)
+export async function listGroups(): Promise<ApiResponse<Group[]>> {
+  return request<Group[]>("/groups")
 }
 
 /**
- * Lista todos os grupos existentes (não filtrados por organização)
+ * Lista todos os grupos existentes no sistema
  */
 export async function listAllGroups(): Promise<ApiResponse<Group[]>> {
-  return request<Group[]>("/groups")
+  return request<Group[]>("/groups/all")
 }
 
 /**
@@ -59,10 +59,10 @@ export async function getGroup(groupId: string): Promise<ApiResponse<Group>> {
 }
 
 /**
- * Cria um novo grupo
+ * Cria um novo grupo na organização atual
  */
-export async function createGroup(accountId: string, data: CreateGroupData): Promise<ApiResponse<Group>> {
-  return request<Group>(`/accounts/${accountId}/groups`, {
+export async function createGroup(data: CreateGroupData): Promise<ApiResponse<Group>> {
+  return request<Group>("/groups", {
     method: "POST",
     body: JSON.stringify(data),
   })
@@ -114,21 +114,21 @@ export async function removeGroupMember(groupId: string, userId: string): Promis
 }
 
 /**
- * Associa um grupo existente a uma organização
+ * Associa um grupo existente à organização atual
  */
-export async function addGroupToAccount(accountId: string, groupId: string): Promise<ApiResponse<void>> {
-  return request<void>(`/accounts/${accountId}/groups/associate`, {
+export async function addGroupToAccount(groupId: string): Promise<ApiResponse<void>> {
+  return request<void>("/groups/associate", {
     method: "POST",
     body: JSON.stringify({ groupId }),
   })
 }
 
 /**
- * Remove a associação de um grupo com uma organização (desassocia o grupo da organização)
+ * Remove a associação de um grupo com a organização atual
  */
-export async function removeGroupFromAccount(accountId: string, groupId: string): Promise<ApiResponse<void>> {
-  return request<void>(`/accounts/${accountId}/groups/${groupId}`, {
-    method: "DELETE",
+export async function removeGroupFromAccount(groupId: string): Promise<ApiResponse<void>> {
+  return request<void>(`/groups/${groupId}/unassociate`, {
+    method: "POST",
   })
 }
 
