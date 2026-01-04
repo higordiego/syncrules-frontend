@@ -16,15 +16,14 @@ import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Card, CardContent } from "@/components/ui/card"
-import { Separator } from "@/components/ui/separator"
-import { Key, Building2, FolderKanban, Globe, CheckCircle2, Loader2 } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Key, FolderKanban, Globe, CheckCircle2, Loader2, AlertCircle } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import type { MCPKey, MCPKeyScope } from "@/lib/api-mcp-keys"
 import { createMCPKey, updateMCPKey } from "@/lib/api-mcp-keys"
-import { listAccounts, type Account as ApiAccount } from "@/lib/api-accounts"
 import { listProjects } from "@/lib/api-projects"
 // Removido import de markKeyAsViewed - não marcamos automaticamente após criação
-import { getCurrentAccountId } from "@/components/accounts/account-selector"
+import { useAccount } from "@/context/AccountContext"
 
 interface MCPKeyScopeDialogProps {
   isOpen: boolean
@@ -33,9 +32,6 @@ interface MCPKeyScopeDialogProps {
   existingKey?: MCPKey
 }
 
-interface AccountWithProjects extends ApiAccount {
-  projects?: Array<{ id: string; name: string; description?: string }>
-}
 
 export function MCPKeyScopeDialog({
   isOpen,
@@ -44,34 +40,20 @@ export function MCPKeyScopeDialog({
   existingKey,
 }: MCPKeyScopeDialogProps) {
   const { toast } = useToast()
+  const { selectedAccountId } = useAccount()
   const [isSaving, setIsSaving] = useState(false)
-  const [isLoadingAccounts, setIsLoadingAccounts] = useState(false)
   const [isLoadingProjects, setIsLoadingProjects] = useState(false)
-  const [accounts, setAccounts] = useState<AccountWithProjects[]>([])
-  const [hasLoadedProjectsForScope, setHasLoadedProjectsForScope] = useState(false)
-  const loadingProjectsRef = useRef<Set<string>>(new Set())
-  const loadedAccountsRef = useRef<Set<string>>(new Set())
-  const [hasAttemptedToLoadAccounts, setHasAttemptedToLoadAccounts] = useState(false)
-  const accountsRef = useRef<AccountWithProjects[]>([])
-  const isInitializingRef = useRef(false)
-  const hasInitializedRef = useRef(false)
+  const [projects, setProjects] = useState<Array<{ id: string; name: string; description?: string }>>([])
   const prevIsOpenRef = useRef(isOpen)
   const prevExistingKeyIdRef = useRef<string | undefined>(existingKey?.id)
-  
-  // Sincronizar ref com state para evitar loops
-  useEffect(() => {
-    accountsRef.current = accounts
-  }, [accounts])
   
   // Detectar mudança de isOpen
   useEffect(() => {
     const wasOpen = prevIsOpenRef.current
     prevIsOpenRef.current = isOpen
     
-    // Se fechou, resetar flags
+    // Se fechou, resetar
     if (wasOpen && !isOpen) {
-      hasInitializedRef.current = false
-      isInitializingRef.current = false
       prevExistingKeyIdRef.current = undefined
     }
   }, [isOpen])
@@ -79,115 +61,29 @@ export function MCPKeyScopeDialog({
     name: "",
     description: "",
     scope: "all_projects" as MCPKeyScope,
-    accountIds: [] as string[],
-    projectSelectionMode: "all" as "all" | "specific", // Para organizações: todos os projetos ou específicos
     projectIds: [] as string[],
   })
 
-  const loadAccounts = useCallback(async () => {
-    setIsLoadingAccounts(true)
+  // Carregar projetos da organização atual
+  const loadProjects = useCallback(async () => {
+    if (!selectedAccountId) return
+    
+    setIsLoadingProjects(true)
     try {
-      const response = await listAccounts()
+      const response = await listProjects()
       if (response.success && response.data) {
-        setAccounts((prev) => {
-          // Verificar se realmente precisa atualizar
-          const newAccounts = (response.data || []).map((acc: any) => ({ ...acc, projects: [] }))
-          // Comparar se mudou
-          if (prev.length === newAccounts.length &&
-            prev.every((acc, i) => acc.id === newAccounts[i]?.id)) {
-            return prev // Não mudou, retornar o mesmo array
-          }
-          // Reset refs quando carregar novos accounts
-          loadedAccountsRef.current.clear()
-          return newAccounts
-        })
+        const projectsArray = Array.isArray(response.data) ? response.data : []
+        setProjects(projectsArray.map((p: any) => ({
+          id: p.id,
+          name: p.name,
+          description: p.description,
+        })))
       } else {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Failed to load organizations",
-        })
+        setProjects([])
       }
     } catch (error) {
-      console.error("Error loading accounts:", error)
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Failed to load organizations",
-      })
-    } finally {
-      setIsLoadingAccounts(false)
-      setHasAttemptedToLoadAccounts(true)
-    }
-  }, [toast])
-
-  const loadProjectsForAccounts = useCallback(async (accountIds: string[]): Promise<void> => {
-    if (accountIds.length === 0) return
-
-    // Filtrar accounts que já estão sendo carregados ou já foram carregados
-    const accountsToLoad = accountIds.filter((id) => {
-      return !loadingProjectsRef.current.has(id) && !loadedAccountsRef.current.has(id)
-    })
-
-    if (accountsToLoad.length === 0) return
-
-    // Marcar como carregando ANTES de fazer qualquer setState
-    accountsToLoad.forEach((id) => loadingProjectsRef.current.add(id))
-    setIsLoadingProjects(true)
-
-    try {
-      const projectsPromises = accountsToLoad.map(async (accountId) => {
-        const response = await listProjects(accountId)
-        return { accountId, projects: response.success && response.data ? response.data : [] }
-      })
-
-      const results = await Promise.all(projectsPromises)
-
-      // Usar função de atualização para evitar dependências e loops
-      // Usar ref para obter o estado atual sem causar re-renderizações
-      setAccounts((prev) => {
-        // Verificar se realmente precisa atualizar
-        let needsUpdate = false
-        const updated = prev.map((acc) => {
-          const result = results.find((r) => r.accountId === acc.id)
-          if (result) {
-            const newProjects = result.projects.map((p: any) => ({
-              id: p.id,
-              name: p.name,
-              description: p.description,
-            }))
-            const currentProjects = acc.projects || []
-            // Comparar se realmente mudou usando comparação profunda
-            const projectsChanged = 
-              currentProjects.length !== newProjects.length ||
-              !currentProjects.every((p, i) => p.id === newProjects[i]?.id)
-            
-            if (projectsChanged) {
-              needsUpdate = true
-              return {
-                ...acc,
-                projects: newProjects,
-              }
-            }
-          }
-          return acc
-        })
-        // Só retornar novo array se realmente mudou - isso evita loops
-        if (!needsUpdate) {
-          return prev
-        }
-        return updated
-      })
-
-      // Marcar como carregados DEPOIS de atualizar o estado
-      accountsToLoad.forEach((id) => {
-        loadingProjectsRef.current.delete(id)
-        loadedAccountsRef.current.add(id)
-      })
-    } catch (error) {
       console.error("Error loading projects:", error)
-      // Remover da lista de carregando em caso de erro
-      accountsToLoad.forEach((id) => loadingProjectsRef.current.delete(id))
+      setProjects([])
       toast({
         variant: "destructive",
         title: "Error",
@@ -196,182 +92,105 @@ export function MCPKeyScopeDialog({
     } finally {
       setIsLoadingProjects(false)
     }
-  }, [toast])
+  }, [selectedAccountId, toast])
 
-  // Carregar organizações ao abrir o diálogo
+  // Carregar projetos quando abrir o diálogo
+  const hasLoadedProjectsRef = useRef(false)
+  const scopeRef = useRef(formData.scope)
+  scopeRef.current = formData.scope
+  
   useEffect(() => {
-    if (!isOpen) return
+    if (!isOpen || !selectedAccountId) {
+      hasLoadedProjectsRef.current = false
+      return
+    }
     
-    // Só carregar uma vez quando abrir
-    if (!hasAttemptedToLoadAccounts && !isLoadingAccounts && !isInitializingRef.current) {
-      loadAccounts()
+    // Sempre carregar projetos quando abrir o modal (para verificar se existem)
+    if (!isLoadingProjects && !hasLoadedProjectsRef.current) {
+      hasLoadedProjectsRef.current = true
+      loadProjects()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, hasAttemptedToLoadAccounts, isLoadingAccounts])
+  }, [isOpen, selectedAccountId, isLoadingProjects, loadProjects])
 
-  // Carregar projetos das organizações selecionadas (para account com projetos específicos)
+  // Preservar projectIds quando projetos são carregados (modo edição)
+  const savedProjectIdsRef = useRef<string[]>([])
   useEffect(() => {
-    // Verificar condições antes de executar
-    if (formData.scope !== "account" || formData.projectSelectionMode !== "specific" || isLoadingProjects) {
-      return
-    }
-
-    if (formData.accountIds.length === 0) {
-      return
-    }
-
-    // Verificar se já temos os projetos carregados usando apenas refs para evitar loops
-    const currentAccounts = accountsRef.current
-    const accountIdsToLoad = formData.accountIds.filter((accountId) => {
-      // Se já está carregando ou já foi carregado, não precisa carregar novamente
-      if (loadingProjectsRef.current.has(accountId) || loadedAccountsRef.current.has(accountId)) {
-        return false
-      }
-      // Verificar se já tem projetos carregados
-      const account = currentAccounts.find((acc) => acc.id === accountId)
-      if (account && account.projects && account.projects.length > 0) {
-        return false
-      }
-      return true
-    })
-
-    if (accountIdsToLoad.length > 0) {
-      // Usar setTimeout para evitar atualizações síncronas que causam loops
-      const timeoutId = setTimeout(() => {
-        loadProjectsForAccounts(accountIdsToLoad)
-      }, 0)
+    if (isOpen && existingKey && formData.scope === "project" && projects.length > 0 && !isLoadingProjects) {
+      const existingProjectIds = existingKey.projectIds || []
       
-      return () => clearTimeout(timeoutId)
-    }
-    // Remover loadProjectsForAccounts das dependências para evitar loops
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [formData.accountIds, formData.projectSelectionMode, formData.scope, isLoadingProjects])
-
-  // Carregar projetos de todas as organizações (para scope project)
-  useEffect(() => {
-    if (!isOpen || isInitializingRef.current) {
-      if (hasLoadedProjectsForScope) {
-        setHasLoadedProjectsForScope(false)
-      }
-      return
-    }
-    
-    if (formData.scope !== "project" || isLoadingProjects || hasLoadedProjectsForScope) {
-      return
-    }
-
-    // Usar ref em vez de state para evitar loops
-    const currentAccounts = accountsRef.current
-    const accountIdsToLoad = currentAccounts
-      .filter((acc) => {
-        // Verificar se já está carregando ou já foi carregado
-        if (loadingProjectsRef.current.has(acc.id) || loadedAccountsRef.current.has(acc.id)) {
-          return false
+      // Se temos projectIds salvos e eles não estão no formData, restaurar
+      if (existingProjectIds.length > 0) {
+        const currentIds = formData.projectIds || []
+        const allIdsMatch = existingProjectIds.every(id => currentIds.includes(id)) && 
+                           currentIds.every(id => existingProjectIds.includes(id))
+        
+        if (!allIdsMatch) {
+          setFormData((prev) => ({
+            ...prev,
+            projectIds: existingProjectIds,
+          }))
         }
-        return !acc.projects || acc.projects.length === 0
-      })
-      .map((acc) => acc.id)
-      
-    if (accountIdsToLoad.length > 0 && currentAccounts.length > 0) {
-      setHasLoadedProjectsForScope(true)
-      // Usar setTimeout para evitar atualizações síncronas
-      setTimeout(() => {
-        loadProjectsForAccounts(accountIdsToLoad)
-      }, 100)
+      }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [formData.scope, isOpen, isLoadingProjects, hasLoadedProjectsForScope])
+  }, [isOpen, existingKey?.projectIds, projects.length, isLoadingProjects, formData.scope])
 
   // Inicializar formData quando abrir o diálogo
   useEffect(() => {
     if (!isOpen) {
-      // Reset quando fechar o diálogo - usar um timeout para evitar loops
-      if (hasInitializedRef.current) {
-        // Reset assíncrono para evitar loops
-        const timeoutId = setTimeout(() => {
-          setFormData({
-            name: "",
-            description: "",
-            scope: "all_projects",
-            accountIds: [],
-            projectSelectionMode: "all",
-            projectIds: [],
-          })
-          setAccounts([])
-          setHasLoadedProjectsForScope(false)
-          setHasAttemptedToLoadAccounts(false)
-          loadingProjectsRef.current.clear()
-          loadedAccountsRef.current.clear()
-          hasInitializedRef.current = false
-          isInitializingRef.current = false
-        }, 100)
-        return () => clearTimeout(timeoutId)
-      }
-      return
-    }
-
-    // Verificar se já inicializou para este estado
-    const currentKeyId = existingKey?.id
-    const keyChanged = prevExistingKeyIdRef.current !== currentKeyId
-    
-    // Só inicializar se:
-    // 1. Ainda não inicializou OU
-    // 2. A chave sendo editada mudou
-    if (hasInitializedRef.current && !keyChanged) {
-      return
-    }
-
-    // Marcar como inicializando
-    isInitializingRef.current = true
-    prevExistingKeyIdRef.current = currentKeyId
-
-    if (existingKey) {
-      // Modo edição
-      setFormData({
-        name: existingKey.name,
-        description: existingKey.description || "",
-        scope: existingKey.scope,
-        accountIds: existingKey.accountIds || (existingKey.accountId ? [existingKey.accountId] : []),
-        projectSelectionMode: existingKey.projectIds && existingKey.projectIds.length > 0 ? "specific" : "all",
-        projectIds: existingKey.projectIds || [],
-      })
-      
-      // Carregar accounts e projects apenas uma vez quando abrir em modo edição
-      if (accounts.length === 0 && !isLoadingAccounts && !hasAttemptedToLoadAccounts) {
-        // Usar setTimeout para evitar atualizações síncronas
-        setTimeout(() => {
-          loadAccounts().then(() => {
-            if (existingKey.projectIds && existingKey.projectIds.length > 0) {
-              const accountIdsToLoad = existingKey.accountIds || (existingKey.accountId ? [existingKey.accountId] : [])
-              if (accountIdsToLoad.length > 0) {
-                setTimeout(() => {
-                  loadProjectsForAccounts(accountIdsToLoad)
-                }, 200)
-              }
-            }
-          })
-        }, 0)
-      }
-    } else {
-      // Modo criação - reset
+      // Reset quando fechar o diálogo
       setFormData({
         name: "",
         description: "",
         scope: "all_projects",
-        accountIds: [],
-        projectSelectionMode: "all",
         projectIds: [],
       })
+      setProjects([])
+      prevExistingKeyIdRef.current = undefined
+      hasLoadedProjectsRef.current = false
+      return
     }
+
+    // Verificar se a chave sendo editada mudou
+    const currentKeyId = existingKey?.id
+    const keyChanged = prevExistingKeyIdRef.current !== currentKeyId
     
-    // Marcar como inicializado após um pequeno delay
-    setTimeout(() => {
-      hasInitializedRef.current = true
-      isInitializingRef.current = false
-    }, 50)
-    
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, existingKey?.id])
+    if (keyChanged || (existingKey && prevExistingKeyIdRef.current === undefined)) {
+      prevExistingKeyIdRef.current = currentKeyId
+      
+      if (existingKey) {
+        // Modo edição
+        // Se o scope for "account", converter para "all_projects" (mesmo comportamento)
+        const scope = existingKey.scope === "account" ? "all_projects" : existingKey.scope
+        const projectIds = existingKey.projectIds || []
+        
+        setFormData({
+          name: existingKey.name,
+          description: existingKey.description || "",
+          scope: scope,
+          projectIds: projectIds,
+        })
+        
+        // Sempre carregar projetos se scope for "project" (mesmo que não tenha projectIds ainda)
+        if (scope === "project" && !hasLoadedProjectsRef.current) {
+          hasLoadedProjectsRef.current = true
+          // Salvar projectIds para restaurar após carregar projetos
+          savedProjectIdsRef.current = projectIds
+          loadProjects()
+        } else if (scope === "project") {
+          // Se já carregou projetos, garantir que projectIds estão corretos
+          savedProjectIdsRef.current = projectIds
+        }
+      } else {
+        // Modo criação - reset
+        setFormData({
+          name: "",
+          description: "",
+          scope: "all_projects",
+          projectIds: [],
+        })
+      }
+    }
+  }, [isOpen, existingKey?.id, loadProjects])
 
     const handleSubmit = async (e: React.FormEvent) => {
       e.preventDefault()
@@ -382,24 +201,6 @@ export function MCPKeyScopeDialog({
           variant: "destructive",
           title: "Error",
           description: "Key name is required",
-        })
-        return
-      }
-
-      if (formData.scope === "account" && formData.accountIds.length === 0) {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Please select at least one organization",
-        })
-        return
-      }
-
-      if (formData.scope === "account" && formData.projectSelectionMode === "specific" && formData.projectIds.length === 0) {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Please select at least one project",
         })
         return
       }
@@ -416,19 +217,18 @@ export function MCPKeyScopeDialog({
       try {
         setIsSaving(true)
 
+        // Se o scope for "account", converter para "all_projects" (mesmo comportamento)
+        const scope = formData.scope === "account" ? "all_projects" : formData.scope
+
         const baseData: any = {
           name: formData.name,
           description: formData.description,
-          scope: formData.scope,
+          scope: scope,
         }
 
-        if (formData.scope === "account") {
-          // Múltiplas organizações
-          baseData.accountIds = formData.accountIds
-          if (formData.projectSelectionMode === "specific") {
-            baseData.projectIds = formData.projectIds
-          }
-        } else if (formData.scope === "project") {
+        // AccountID sempre vem do header X-Account-Id (backend ignora accountIds no body)
+        // Não precisamos enviar accountIds, o backend usa automaticamente do header
+        if (scope === "project") {
           baseData.projectIds = formData.projectIds
         }
 
@@ -470,50 +270,61 @@ export function MCPKeyScopeDialog({
       switch (scope) {
         case "all_projects":
           return <Globe className="h-5 w-5 text-blue-500" />
-        case "account":
-          return <Building2 className="h-5 w-5 text-purple-500" />
         case "project":
           return <FolderKanban className="h-5 w-5 text-green-500" />
+        default:
+          return <Globe className="h-5 w-5 text-blue-500" />
       }
     }
 
     const getScopeDescription = (scope: MCPKeyScope) => {
       switch (scope) {
         case "all_projects":
-          return "Access to all projects across all your organizations"
-        case "account":
-          return formData.accountIds.length > 0
-            ? `Access to ${formData.projectSelectionMode === "all" ? "all projects" : "selected projects"} in ${formData.accountIds.length} organization(s)`
-            : "Select one or more organizations to grant access"
+          return "Access to all projects in your current organization"
         case "project":
           return formData.projectIds.length > 0
             ? `Access to ${formData.projectIds.length} selected project(s)`
             : "Select specific project(s) to grant access"
+        default:
+          return "Access to all projects in your current organization"
       }
     }
 
-    // Obter todos os projetos disponíveis das organizações selecionadas
+    // Obter todos os projetos disponíveis da organização atual
     const getAvailableProjects = () => {
-      if (formData.scope === "account" && formData.accountIds.length > 0) {
-        return accounts
-          .filter((acc) => formData.accountIds.includes(acc.id))
-          .flatMap((acc) =>
-            (acc.projects || []).map((p) => ({
-              ...p,
-              accountId: acc.id,
-              accountName: acc.name,
-            }))
-          )
-      }
-      return []
+      return projects
     }
 
     const availableProjects = getAvailableProjects()
 
+    // Handler estável para toggle de projetos - evita loops infinitos
+    const handleToggleProject = useCallback((projectId: string) => {
+      setFormData((prev) => {
+        const isCurrentlySelected = prev.projectIds.includes(projectId)
+        
+        // Criar novo array para evitar mutação
+        if (isCurrentlySelected) {
+          return {
+            ...prev,
+            projectIds: prev.projectIds.filter((id) => id !== projectId),
+          }
+        } else {
+          // Verificar se já está no array antes de adicionar (proteção extra)
+          if (prev.projectIds.includes(projectId)) {
+            return prev
+          }
+          return {
+            ...prev,
+            projectIds: [...prev.projectIds, projectId],
+          }
+        }
+      })
+    }, [])
+
     return (
       <Dialog open={isOpen} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-[95vw] sm:max-w-3xl w-full max-h-[95vh] overflow-hidden flex flex-col">
-          <DialogHeader className="flex-shrink-0 pb-4">
+        <DialogContent className="max-w-[95vw] sm:max-w-3xl w-full max-h-[95vh] overflow-hidden flex flex-col p-0 gap-0">
+          <DialogHeader className="flex-shrink-0 px-6 pt-6 pb-4 border-b">
             <DialogTitle className="text-2xl flex items-center gap-2">
               <Key className="h-5 w-5 text-primary" />
               {existingKey ? "Edit MCP Key Scope" : "Create New MCP Key"}
@@ -525,8 +336,18 @@ export function MCPKeyScopeDialog({
             </DialogDescription>
           </DialogHeader>
 
-          <form onSubmit={handleSubmit} className="flex flex-col h-full overflow-hidden">
-            <div className="space-y-6 py-4 flex-1 overflow-y-auto pr-2">
+          <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6 min-h-0">
+              {/* Alert: Necessário criar projeto */}
+              {!existingKey && !isLoadingProjects && projects.length === 0 && (
+                <Alert className="border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-900">
+                  <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-500" />
+                  <AlertDescription className="text-sm text-amber-800 dark:text-amber-200">
+                    <strong>Projeto necessário:</strong> Você precisa criar pelo menos um projeto nesta organização antes de criar uma chave MCP. 
+                    Crie um projeto primeiro e depois retorne para criar a chave.
+                  </AlertDescription>
+                </Alert>
+              )}
               {/* Name */}
               <div className="space-y-2">
                 <Label htmlFor="key-name" className="text-sm font-semibold">
@@ -561,7 +382,7 @@ export function MCPKeyScopeDialog({
               <div className="space-y-4">
                 <Label className="text-sm font-semibold">Access Scope *</Label>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {/* All Projects */}
                   <Card
                     className={`cursor-pointer transition-all hover:border-primary/50 ${formData.scope === "all_projects" ? "border-primary border-2 bg-primary/5" : ""
@@ -570,7 +391,6 @@ export function MCPKeyScopeDialog({
                       setFormData((prev) => ({
                         ...prev,
                         scope: "all_projects",
-                        accountIds: [],
                         projectIds: [],
                       }))
                     }}
@@ -586,37 +406,7 @@ export function MCPKeyScopeDialog({
                             )}
                           </div>
                           <p className="text-xs text-muted-foreground">
-                            Access to all projects across all organizations
-                          </p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* Organization */}
-                  <Card
-                    className={`cursor-pointer transition-all hover:border-primary/50 ${formData.scope === "account" ? "border-primary border-2 bg-primary/5" : ""
-                      }`}
-                    onClick={() => {
-                      setFormData((prev) => ({
-                        ...prev,
-                        scope: "account",
-                        projectIds: [],
-                      }))
-                    }}
-                  >
-                    <CardContent className="p-4">
-                      <div className="flex items-start gap-3">
-                        <div className="mt-0.5">{getScopeIcon("account")}</div>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="font-semibold text-sm">Organization(s)</span>
-                            {formData.scope === "account" && (
-                              <CheckCircle2 className="h-4 w-4 text-primary" />
-                            )}
-                          </div>
-                          <p className="text-xs text-muted-foreground">
-                            Select one or more organizations
+                            Access to all projects in your current organization
                           </p>
                         </div>
                       </div>
@@ -631,9 +421,13 @@ export function MCPKeyScopeDialog({
                       setFormData((prev) => ({
                         ...prev,
                         scope: "project",
-                        accountIds: [],
-                        projectSelectionMode: "all",
+                        projectIds: [],
                       }))
+                      // Carregar projetos quando selecionar scope project
+                      if (selectedAccountId && projects.length === 0 && !isLoadingProjects && !hasLoadedProjectsRef.current) {
+                        hasLoadedProjectsRef.current = true
+                        loadProjects()
+                      }
                     }}
                   >
                     <CardContent className="p-4">
@@ -663,296 +457,6 @@ export function MCPKeyScopeDialog({
                   </div>
                 </div>
 
-                {/* Organization Selection (if scope is account) */}
-                {formData.scope === "account" && (
-                  <div className="space-y-4 p-4 border rounded-lg bg-card">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label className="text-sm font-semibold">Select Organization(s) *</Label>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Choose one or more organizations this key can access
-                        </p>
-                      </div>
-                      {formData.accountIds.length > 0 && (
-                        <Badge variant="secondary" className="text-xs">
-                          {formData.accountIds.length} selected
-                        </Badge>
-                      )}
-                    </div>
-
-                    {isLoadingAccounts ? (
-                      <div className="flex items-center justify-center py-8">
-                        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                      </div>
-                    ) : (
-                      <div className="space-y-2 max-h-48 overflow-y-auto">
-                        {accounts.map((account) => {
-                          const isSelected = formData.accountIds.includes(account.id)
-                          return (
-                            <div
-                              key={account.id}
-                              className={`flex items-center space-x-3 p-3 rounded-lg border transition-all cursor-pointer ${isSelected
-                                ? "border-primary bg-primary/5"
-                                : "hover:bg-muted/50"
-                                }`}
-                              onClick={() => {
-                                if (isSelected) {
-                                  setFormData((prev) => ({
-                                    ...prev,
-                                    accountIds: prev.accountIds.filter((id) => id !== account.id),
-                                    projectIds: prev.projectIds.filter(
-                                      (pid) => !account.projects?.some((p) => p.id === pid)
-                                    ),
-                                  }))
-                                } else {
-                                  setFormData((prev) => {
-                                    const newAccountIds = [...prev.accountIds, account.id]
-                                    // Carregar projetos se necessário e se estiver em modo específico
-                                    if (prev.scope === "account" && prev.projectSelectionMode === "specific") {
-                                      // Verificar se precisa carregar projetos para esta organização
-                                      if (!account.projects || account.projects.length === 0) {
-                                        if (!loadingProjectsRef.current.has(account.id) && !loadedAccountsRef.current.has(account.id)) {
-                                          // Usar setTimeout para evitar loops de atualização
-                                          setTimeout(() => {
-                                            loadProjectsForAccounts([account.id])
-                                          }, 50)
-                                        }
-                                      }
-                                    }
-                                    return {
-                                      ...prev,
-                                      accountIds: newAccountIds,
-                                    }
-                                  })
-                                }
-                              }}
-                            >
-                              <Checkbox
-                                checked={isSelected}
-                                onCheckedChange={(checked) => {
-                                  if (checked) {
-                                    setFormData((prev) => {
-                                      const newAccountIds = [...prev.accountIds, account.id]
-                                      // Carregar projetos se necessário e se estiver em modo específico
-                                      if (prev.scope === "account" && prev.projectSelectionMode === "specific") {
-                                        // Verificar se precisa carregar projetos para esta organização
-                                        if (!account.projects || account.projects.length === 0) {
-                                          if (!loadingProjectsRef.current.has(account.id) && !loadedAccountsRef.current.has(account.id)) {
-                                            // Usar setTimeout para evitar loops de atualização
-                                            setTimeout(() => {
-                                              loadProjectsForAccounts([account.id])
-                                            }, 50)
-                                          }
-                                        }
-                                      }
-                                      return {
-                                        ...prev,
-                                        accountIds: newAccountIds,
-                                      }
-                                    })
-                                  } else {
-                                    setFormData((prev) => ({
-                                      ...prev,
-                                      accountIds: prev.accountIds.filter((id) => id !== account.id),
-                                      projectIds: prev.projectIds.filter(
-                                        (pid) => !account.projects?.some((p) => p.id === pid)
-                                      ),
-                                    }))
-                                  }
-                                }}
-                              />
-                              <Building2 className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium truncate">{account.name}</p>
-                                <p className="text-xs text-muted-foreground">{account.slug}</p>
-                              </div>
-                              {isSelected && <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0" />}
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )}
-
-                    {/* Project Selection Mode (if organizations selected) */}
-                    {formData.accountIds.length > 0 && (
-                      <>
-                        <Separator className="my-4" />
-                        <div className="space-y-3">
-                          <Label className="text-sm font-semibold">Project Access</Label>
-                          <div className="grid grid-cols-2 gap-3">
-                            <Card
-                              className={`cursor-pointer transition-all ${formData.projectSelectionMode === "all"
-                                ? "border-primary border-2 bg-primary/5"
-                                : "hover:border-primary/50"
-                                }`}
-                              onClick={() => {
-                                setFormData((prev) => ({
-                                  ...prev,
-                                  projectSelectionMode: "all",
-                                  projectIds: [],
-                                }))
-                              }}
-                            >
-                              <CardContent className="p-3">
-                                <div className="flex items-center gap-2">
-                                  <Globe className="h-4 w-4 text-muted-foreground" />
-                                  <span className="text-sm font-medium">All Projects</span>
-                                  {formData.projectSelectionMode === "all" && (
-                                    <CheckCircle2 className="h-4 w-4 text-primary ml-auto" />
-                                  )}
-                                </div>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                  Access to all projects in selected organizations
-                                </p>
-                              </CardContent>
-                            </Card>
-
-                            <Card
-                              className={`cursor-pointer transition-all ${formData.projectSelectionMode === "specific"
-                                ? "border-primary border-2 bg-primary/5"
-                                : "hover:border-primary/50"
-                                }`}
-                              onClick={() => {
-                                setFormData((prev) => ({
-                                  ...prev,
-                                  projectSelectionMode: "specific",
-                                }))
-                              }}
-                            >
-                              <CardContent className="p-3">
-                                <div className="flex items-center gap-2">
-                                  <FolderKanban className="h-4 w-4 text-muted-foreground" />
-                                  <span className="text-sm font-medium">Specific Projects</span>
-                                  {formData.projectSelectionMode === "specific" && (
-                                    <CheckCircle2 className="h-4 w-4 text-primary ml-auto" />
-                                  )}
-                                </div>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                  Choose specific projects to grant access
-                                </p>
-                              </CardContent>
-                            </Card>
-                          </div>
-
-                          {/* Project Selection (if specific mode) */}
-                          {formData.projectSelectionMode === "specific" && (
-                            <div className="space-y-3 mt-4">
-                              <div className="flex items-center justify-between">
-                                <Label className="text-sm font-semibold">Select Project(s) *</Label>
-                                {formData.projectIds.length > 0 && (
-                                  <Badge variant="secondary" className="text-xs">
-                                    {formData.projectIds.length} selected
-                                  </Badge>
-                                )}
-                              </div>
-
-                              {isLoadingProjects ? (
-                                <div className="flex items-center justify-center py-8">
-                                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                                </div>
-                              ) : availableProjects.length === 0 ? (
-                                <div className="text-center py-8 text-muted-foreground text-sm">
-                                  No projects available in selected organizations
-                                </div>
-                              ) : (
-                                <div className="space-y-2 max-h-64 overflow-y-auto border rounded-lg p-3 bg-muted/20">
-                                  {formData.accountIds.map((accountId) => {
-                                    const account = accounts.find((a) => a.id === accountId)
-                                    const accountProjects = account?.projects || []
-                                    if (accountProjects.length === 0) return null
-
-                                    return (
-                                      <div key={accountId} className="space-y-2">
-                                        <div className="flex items-center gap-2 mb-2">
-                                          <Building2 className="h-3 w-3 text-muted-foreground" />
-                                          <span className="text-xs font-semibold text-muted-foreground uppercase">
-                                            {account?.name}
-                                          </span>
-                                        </div>
-                                        {accountProjects.map((project) => {
-                                          const isSelected = formData.projectIds.includes(project.id)
-                                          return (
-                                            <div
-                                              key={project.id}
-                                              className={`flex items-center space-x-2 p-2 rounded transition-all cursor-pointer ${isSelected ? "bg-primary/10" : "hover:bg-muted/50"
-                                                }`}
-                                              onClick={() => {
-                                                if (isSelected) {
-                                                  setFormData((prev) => ({
-                                                    ...prev,
-                                                    projectIds: prev.projectIds.filter(
-                                                      (id) => id !== project.id
-                                                    ),
-                                                  }))
-                                                } else {
-                                                  setFormData((prev) => ({
-                                                    ...prev,
-                                                    projectIds: [...prev.projectIds, project.id],
-                                                  }))
-                                                }
-                                              }}
-                                            >
-                                              <Checkbox
-                                                checked={isSelected}
-                                                onCheckedChange={(checked) => {
-                                                  if (checked) {
-                                                    setFormData((prev) => ({
-                                                      ...prev,
-                                                      projectIds: [...prev.projectIds, project.id],
-                                                    }))
-                                                  } else {
-                                                    setFormData((prev) => ({
-                                                      ...prev,
-                                                      projectIds: prev.projectIds.filter(
-                                                        (id) => id !== project.id
-                                                      ),
-                                                    }))
-                                                  }
-                                                }}
-                                              />
-                                              <FolderKanban className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                                              <div className="flex-1 min-w-0">
-                                                <p className="text-xs font-medium truncate">{project.name}</p>
-                                                {project.description && (
-                                                  <p className="text-xs text-muted-foreground truncate">
-                                                    {project.description}
-                                                  </p>
-                                                )}
-                                              </div>
-                                            </div>
-                                          )
-                                        })}
-                                      </div>
-                                    )
-                                  })}
-                                </div>
-                              )}
-
-                              {formData.projectIds.length > 0 && (
-                                <div className="flex flex-wrap gap-2 pt-2">
-                                  {formData.projectIds.slice(0, 5).map((projectId) => {
-                                    const project = availableProjects.find((p) => p.id === projectId)
-                                    return (
-                                      <Badge key={projectId} variant="secondary" className="text-xs">
-                                        {project?.name || projectId}
-                                      </Badge>
-                                    )
-                                  })}
-                                  {formData.projectIds.length > 5 && (
-                                    <Badge variant="secondary" className="text-xs">
-                                      +{formData.projectIds.length - 5} more
-                                    </Badge>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                )}
-
                 {/* Project Selection (if scope is project) */}
                 {formData.scope === "project" && (
                   <div className="space-y-3 p-4 border rounded-lg bg-card">
@@ -970,81 +474,43 @@ export function MCPKeyScopeDialog({
                       )}
                     </div>
 
-                    {isLoadingAccounts || isLoadingProjects ? (
+                    {isLoadingProjects ? (
                       <div className="flex items-center justify-center py-8">
                         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                       </div>
-                    ) : accounts.length === 0 ? (
+                    ) : projects.length === 0 ? (
                       <div className="text-center py-8 text-muted-foreground text-sm">
-                        No organizations available
+                        No projects available in your organization
                       </div>
                     ) : (
-                      <div className="space-y-2 max-h-64 overflow-y-auto border rounded-lg p-3 bg-muted/20">
-                        {accounts.map((account) => {
-                          const accountProjects = account.projects || []
-
-                          // Não renderizar se ainda não carregou projetos (será carregado pelo useEffect)
-                          if (accountProjects.length === 0 && !isLoadingProjects) {
-                            return null
-                          }
-
+                      <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
+                        {projects.map((project) => {
+                          const isSelected = formData.projectIds.includes(project.id)
+                          
                           return (
-                            <div key={account.id} className="space-y-2">
-                              <div className="flex items-center gap-2 mb-2">
-                                <Building2 className="h-3 w-3 text-muted-foreground" />
-                                <span className="text-xs font-semibold text-muted-foreground uppercase">
-                                  {account.name}
-                                </span>
+                            <div
+                              key={project.id}
+                              className={`flex items-center space-x-3 p-3 rounded-lg border transition-all ${isSelected
+                                ? "border-primary bg-primary/5"
+                                : ""
+                                }`}
+                            >
+                              <Checkbox
+                                checked={isSelected}
+                                onCheckedChange={() => {
+                                  handleToggleProject(project.id)
+                                }}
+                              />
+                              <FolderKanban className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium truncate">{project.name}</p>
+                                {project.description && (
+                                  <p className="text-xs text-muted-foreground truncate">
+                                    {project.description}
+                                  </p>
+                                )}
                               </div>
-                              {accountProjects.map((project) => {
-                                const isSelected = formData.projectIds.includes(project.id)
-                                return (
-                                  <div
-                                    key={project.id}
-                                    className={`flex items-center space-x-2 p-2 rounded transition-all cursor-pointer ${isSelected ? "bg-primary/10" : "hover:bg-muted/50"
-                                      }`}
-                                    onClick={() => {
-                                      if (isSelected) {
-                                        setFormData((prev) => ({
-                                          ...prev,
-                                          projectIds: prev.projectIds.filter((id) => id !== project.id),
-                                        }))
-                                      } else {
-                                        setFormData((prev) => ({
-                                          ...prev,
-                                          projectIds: [...prev.projectIds, project.id],
-                                        }))
-                                      }
-                                    }}
-                                  >
-                                    <Checkbox
-                                      checked={isSelected}
-                                      onCheckedChange={(checked) => {
-                                        if (checked) {
-                                          setFormData((prev) => ({
-                                            ...prev,
-                                            projectIds: [...prev.projectIds, project.id],
-                                          }))
-                                        } else {
-                                          setFormData((prev) => ({
-                                            ...prev,
-                                            projectIds: prev.projectIds.filter((id) => id !== project.id),
-                                          }))
-                                        }
-                                      }}
-                                    />
-                                    <FolderKanban className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                                    <div className="flex-1 min-w-0">
-                                      <p className="text-xs font-medium truncate">{project.name}</p>
-                                      {project.description && (
-                                        <p className="text-xs text-muted-foreground truncate">
-                                          {project.description}
-                                        </p>
-                                      )}
-                                    </div>
-                                  </div>
-                                )
-                              })}
+                              {isSelected && <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0" />}
                             </div>
                           )
                         })}
@@ -1054,9 +520,7 @@ export function MCPKeyScopeDialog({
                     {formData.projectIds.length > 0 && (
                       <div className="flex flex-wrap gap-2 pt-2">
                         {formData.projectIds.slice(0, 5).map((projectId) => {
-                          const project = accounts
-                            .flatMap((acc) => acc.projects || [])
-                            .find((p) => p.id === projectId)
+                          const project = projects.find((p) => p.id === projectId)
                           return (
                             <Badge key={projectId} variant="secondary" className="text-xs">
                               {project?.name || projectId}
@@ -1075,16 +539,21 @@ export function MCPKeyScopeDialog({
               </div>
             </div>
 
-            <DialogFooter className="flex-shrink-0 pt-4 mt-4 border-t">
+            <DialogFooter className="flex-shrink-0 px-6 py-4 border-t bg-muted/30 gap-3">
               <Button
                 type="button"
                 variant="outline"
                 onClick={() => onOpenChange(false)}
-                className="h-11 w-full sm:w-auto"
+                disabled={isSaving}
+                className="h-11 flex-1 sm:flex-none sm:min-w-[100px]"
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={isSaving} className="h-11 w-full sm:w-auto sm:min-w-[120px]">
+              <Button 
+                type="submit" 
+                disabled={isSaving || (!existingKey && !isLoadingProjects && projects.length === 0)} 
+                className="h-11 flex-1 sm:flex-none sm:min-w-[140px]"
+              >
                 {isSaving ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
