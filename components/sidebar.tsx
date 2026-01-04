@@ -35,13 +35,13 @@ export function Sidebar() {
   const navigation: NavItem[] = [
     { name: "Overview", href: "/account", icon: LayoutDashboard },
     { name: "Versioning", href: "/dashboard/versioning", icon: GitBranch, requiresPro: true },
-    { name: "Teams", href: "/account/groups", icon: Users, requiresPro: true },
+    { name: "Teams", href: "/account/groups", icon: Users },
     { name: "Integrations", href: "/dashboard/integrations", icon: Plug },
     { name: "Audit Logs", href: "/dashboard/audit", icon: Shield, requiresEnterprise: true },
-    { name: "Billing", href: "/dashboard/billing", icon: CreditCard },
     { name: "MCP Keys", href: "/mcp-keys", icon: Key },
-    { name: "Activity & Usage", href: "/activity", icon: BarChart3 },
     { name: "Organizations", href: "/account/organizations", icon: Building2 },
+    { name: "Activity & Usage", href: "/activity", icon: BarChart3 },
+    { name: "Billing", href: "/dashboard/billing", icon: CreditCard }
   ]
 
   const isPlanPro = plan === "pro" || plan === "enterprise"

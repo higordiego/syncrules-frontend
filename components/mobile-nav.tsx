@@ -28,7 +28,7 @@ import { Badge } from "@/components/ui/badge"
 const navigation = [
   { name: "Overview", href: "/account", icon: LayoutDashboard },
   { name: "Versioning", href: "/dashboard/versioning", icon: GitBranch, requiresPro: true },
-  { name: "Teams", href: "/account/groups", icon: Users, requiresPro: true },
+  { name: "Teams", href: "/account/groups", icon: Users },
   { name: "Integrations", href: "/dashboard/integrations", icon: Plug },
   { name: "Audit Logs", href: "/dashboard/audit", icon: Shield, requiresEnterprise: true },
   { name: "Billing", href: "/dashboard/billing", icon: CreditCard },
