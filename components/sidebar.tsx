@@ -38,7 +38,7 @@ export function Sidebar() {
     { name: "Teams", href: "/account/groups", icon: Users, requiresPro: true },
     { name: "Integrations", href: "/dashboard/integrations", icon: Plug },
     { name: "Audit Logs", href: "/dashboard/audit", icon: Shield, requiresEnterprise: true },
-    { name: "Billing", href: "/plans", icon: CreditCard },
+    { name: "Billing", href: "/dashboard/billing", icon: CreditCard },
     { name: "MCP Keys", href: "/mcp-keys", icon: Key },
     { name: "Activity & Usage", href: "/activity", icon: BarChart3 },
     { name: "Organizations", href: "/account/organizations", icon: Building2 },

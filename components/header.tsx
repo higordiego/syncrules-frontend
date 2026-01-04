@@ -83,7 +83,7 @@ export function Header() {
 
           <ThemeToggle />
 
-          <Link href="/plans">
+          <Link href="/dashboard/billing">
             <Badge
               variant="secondary"
               className={cn(
@@ -123,9 +123,9 @@ export function Header() {
               </DropdownMenuItem>
 
               <DropdownMenuItem asChild>
-                <Link href="/plans" className="cursor-pointer flex items-center">
+                <Link href="/dashboard/billing" className="cursor-pointer flex items-center">
                   <CreditCard className="mr-2 h-4 w-4" />
-                  Plans
+                  Billing
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator />

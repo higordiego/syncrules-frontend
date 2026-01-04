@@ -12,7 +12,7 @@ interface AccountContextType {
     accounts: Account[]
     isLoading: boolean
     switchAccount: (accountId: string) => void
-    refreshAccounts: () => Promise<void>
+    refreshAccounts: () => Promise<Account[]>
 }
 
 const AccountContext = createContext<AccountContextType | undefined>(undefined)
@@ -28,16 +28,20 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     const pathname = usePathname()
     const { toast } = useToast()
 
-    const refreshAccounts = useCallback(async () => {
+    const refreshAccounts = useCallback(async (): Promise<Account[]> => {
         try {
             const response = await listAccounts()
             if (response.success && response.data) {
-                setAccounts(response.data)
-                return response.data
+                // Ensure data is an array
+                const accountsArray = Array.isArray(response.data) ? response.data : []
+                setAccounts(accountsArray)
+                return accountsArray
             }
         } catch (error) {
             console.error("Failed to fetch accounts:", error)
         }
+        // Always return an array, even on error
+        setAccounts([])
         return []
     }, [])
 
@@ -64,18 +68,21 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
             setIsLoading(true)
             const fetchedAccounts = await refreshAccounts()
 
+            // Ensure fetchedAccounts is always an array
+            const accountsArray = Array.isArray(fetchedAccounts) ? fetchedAccounts : []
+
             const storedAccountId = localStorage.getItem(ACCOUNT_STORAGE_KEY)
 
-            if (storedAccountId && fetchedAccounts.some(a => a.id === storedAccountId)) {
+            if (storedAccountId && accountsArray.some(a => a.id === storedAccountId)) {
                 setSelectedAccountId(storedAccountId)
                 setGlobalAccountId(storedAccountId)
-            } else if (fetchedAccounts.length === 1) {
+            } else if (accountsArray.length === 1) {
                 // Auto-select if only one account
-                const onlyAccount = fetchedAccounts[0]
+                const onlyAccount = accountsArray[0]
                 setSelectedAccountId(onlyAccount.id)
                 setGlobalAccountId(onlyAccount.id)
                 localStorage.setItem(ACCOUNT_STORAGE_KEY, onlyAccount.id)
-            } else if (fetchedAccounts.length > 0) {
+            } else if (accountsArray.length > 0) {
                 // Option: we could auto-select the first one or force selection
                 // For now, let's not auto-select if multiple, making the guard trigger
             }
